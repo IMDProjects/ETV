@@ -473,10 +473,6 @@ class CreateViewedLandscapes(object):
             deltaBearingCheck = abs(deltaBearing)
             deltaBearing = abs(deltaBearing/points)
             arcpy.AddMessage("\n deltaBearing: " + str(deltaBearing))
-            for i in range(1, points):
-                outPt = CreateViewedLandscapes.calculateLatLong(self, (initialBearing + i*deltaBearing), radius, centerX, centerY)
-                radialPts.append([outPt[0], outPt[1]])
-                arcpy.AddMessage("\n Output Point: " +str(outPt[0])+ ", " + str(outPt[1]) )
 
             # Add center point to array if not a 360 degree view
             if deltaBearingCheck <> 360:
@@ -484,6 +480,22 @@ class CreateViewedLandscapes(object):
                 arcpy.AddMessage("\n Center Point: " +str(centerX)+ ", " + str(centerY) )
                 #arcpy.AddMessage("\n\n DELTA BEARING: " + str(deltaBearingCheck) + "\n")
                 #arcpy.AddMessage("\n\n ADDED CENTER to " + row.getValue(fieldList[4]) + "\n")
+                outPt = CreateViewedLandscapes.calculateLatLong(self, initialBearing, radius, centerX, centerY)
+                radialPts.append([outPt[0], outPt[1]])
+            for i in range(1, points):
+                 # Determine 'direction' of increment
+##                if (initialBearing == 359) or (initialBearing < finalBearing): # clockwise/positive
+##                    increment = initialBearing + i*deltaBearing
+##                else: # counter-clockwise/negative
+##                    increment = initialBearing + i*deltaBearing
+                if (initialBearing + i*deltaBearing) < 360:  # need to account for radians, not degrees to compensate for left > right bearings
+                    outPt = CreateViewedLandscapes.calculateLatLong(self, (initialBearing + i*deltaBearing), radius, centerX, centerY)
+                else:
+                    outPt = CreateViewedLandscapes.calculateLatLong(self, (0 + i*deltaBearing), radius, centerX, centerY)
+                outPt = CreateViewedLandscapes.calculateLatLong(self, increment, radius, centerX, centerY)
+                #outPt = CreateViewedLandscapes.calculateLatLong(self, (initialBearing + i*deltaBearing), radius, centerX, centerY)
+                radialPts.append([outPt[0], outPt[1]])
+                arcpy.AddMessage("\n Output Point: " +str(outPt[0])+ ", " + str(outPt[1]) )
 
             # Create polygon object from point array
             conePoly = arcpy.Polygon(
@@ -512,6 +524,7 @@ class CreateViewedLandscapes(object):
         # Re-project to output spatial reference
         arcpy.RepairGeometry_management(os.path.join(parameters[1].valueAsText,fullFCName)); messages.addGPMessages()
         arcpy.AlterField_management(os.path.join(parameters[1].valueAsText,fullFCName), "Distance", "Radius_m", "Radius_m"); messages.addGPMessages()
+        arcpy.CalculateField_management(os.path.join(parameters[1].valueAsText,fullFCName), "Radius_m", parameters[3].valueAsText); messages.addGPMessages()
         arcpy.Project_management(os.path.join(parameters[1].valueAsText, fullFCName), os.path.join(parameters[1].valueAsText, fullFCNameOutputSR), outputSpatialReference); messages.addGPMessages()
         #arcpy.Project_management(os.path.join(parameters[1].valueAsText, fullFCName), os.path.join(parameters[1].valueAsText, fullFCNameWebMerc), ServiceSpatialRef); messages.addGPMessages()
         arcpy.RepairGeometry_management(os.path.join(parameters[1].valueAsText, fullFCNameOutputSR)); messages.addGPMessages()
