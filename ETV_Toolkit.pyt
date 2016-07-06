@@ -38,6 +38,7 @@
 #   Credits:
 #       View polygon logic adapted from ETV app javascript code
 #           ($/ETV/Main/1.1.0/NPS.ETV.Web/Views/Viewpoint/Manage.cshtml)
+#           http://inp2300fcvfora1.nps.doi.net:8080/tfs/IRMA/ETV/_versionControl#path=%24%2FETV%2FMain%2F1.1.0%2FNPS.ETV.Web%2FViews%2FViewpoint%2FManage.cshtml&_a=contents
 #
 #       Viewshed code adapted from scripts for Great Plains Wind Energy Project
 #       written by Kirk Sherrill - IMD contractor (2012-2013)
@@ -395,14 +396,16 @@ class CreateViewedLandscapes(object):
 
     def calculateLatLong(self, bearing, dist, cenX, cenY):
         R = EarthRadiusMeters
-        brng = bearing * (math.pi / 180)
+        brng = bearing * (math.pi / 180) # Convert bearing to radians
         lat1 = cenY * (math.pi / 180) # Convert lat to radians
         lon1 = cenX * (math.pi / 180) # Convert long to radians
+        # Find point (in radians) for bearing
         lat2 = math.asin( math.sin(lat1)*math.cos(dist/R) +
                                 math.cos(lat1)*math.sin(dist/R)*math.cos(brng) )
         lon2 = lon1 + math.atan2(math.sin(brng)*math.sin(dist/R)*math.cos(lat1),
                                         math.cos(dist/R)-math.sin(lat1)*math.sin(lat2))
 
+        # Convert radian point to degrees
         DestinationPoint = [lon2 * (180 / math.pi), lat2 * (180 / math.pi)]
         return DestinationPoint
 
@@ -442,10 +445,6 @@ class CreateViewedLandscapes(object):
         points = 32; # arcline points
         radius = int(parameters[3].valueAsText)
 
-        # find the radius in lat/lon
-        #rlat = (radius / EarthRadiusMeters) * r2d;
-        #rlng = rlat / math.cos(center.Y * d2r);
-
         # Define array (list) for lat/long points using radius - becomes input for cone polygon
         radialPts = []
         count =  0
@@ -465,35 +464,23 @@ class CreateViewedLandscapes(object):
             # Cursor through bearing records and create point array for building cone polygon
             #if (initialBearing > finalBearing):
             if (initialBearing == 359):  # For some non-circular views, initial bearings are > than final, hence the explicit logic
-                deltaBearing = 360 #finalBearing = 360
+                bearingDiff = 360 #finalBearing = 360
             else:
-                deltaBearing = finalBearing - initialBearing
-            arcpy.AddMessage("\n DELTA BEARING = " + str(deltaBearing) + " and initialBearing = " + str(initialBearing) + "\n")
+                if (initialBearing > finalBearing):
+                    finalBearing += 360
+                bearingDiff = finalBearing - initialBearing
+            arcpy.AddMessage("\n Full DELTA BEARING = " + str(bearingDiff) + " and initialBearing = " + str(initialBearing) + " and finalBearing = " + str(finalBearing) +  "\n")
 
-            deltaBearingCheck = abs(deltaBearing)
-            deltaBearing = abs(deltaBearing/points)
+            deltaBearingCheck = bearingDiff
+            deltaBearing = float(float(bearingDiff)/points)
             arcpy.AddMessage("\n deltaBearing: " + str(deltaBearing))
 
             # Add center point to array if not a 360 degree view
             if deltaBearingCheck <> 360:
                 radialPts.append([centerX, centerY])
                 arcpy.AddMessage("\n Center Point: " +str(centerX)+ ", " + str(centerY) )
-                #arcpy.AddMessage("\n\n DELTA BEARING: " + str(deltaBearingCheck) + "\n")
-                #arcpy.AddMessage("\n\n ADDED CENTER to " + row.getValue(fieldList[4]) + "\n")
-                outPt = CreateViewedLandscapes.calculateLatLong(self, initialBearing, radius, centerX, centerY)
-                radialPts.append([outPt[0], outPt[1]])
-            for i in range(1, points):
-                 # Determine 'direction' of increment
-##                if (initialBearing == 359) or (initialBearing < finalBearing): # clockwise/positive
-##                    increment = initialBearing + i*deltaBearing
-##                else: # counter-clockwise/negative
-##                    increment = initialBearing + i*deltaBearing
-                if (initialBearing + i*deltaBearing) < 360:  # need to account for radians, not degrees to compensate for left > right bearings
-                    outPt = CreateViewedLandscapes.calculateLatLong(self, (initialBearing + i*deltaBearing), radius, centerX, centerY)
-                else:
-                    outPt = CreateViewedLandscapes.calculateLatLong(self, (0 + i*deltaBearing), radius, centerX, centerY)
-                outPt = CreateViewedLandscapes.calculateLatLong(self, increment, radius, centerX, centerY)
-                #outPt = CreateViewedLandscapes.calculateLatLong(self, (initialBearing + i*deltaBearing), radius, centerX, centerY)
+            for i in range(0, points+1):
+                outPt = CreateViewedLandscapes.calculateLatLong(self, (initialBearing + i*deltaBearing), radius, centerX, centerY)
                 radialPts.append([outPt[0], outPt[1]])
                 arcpy.AddMessage("\n Output Point: " +str(outPt[0])+ ", " + str(outPt[1]) )
 
@@ -927,7 +914,8 @@ class CreateViewshed(object):
         # Assumes source DEM spatial reference is projected (in meters)
         arcpy.env.extent = arcpy.Extent(fcExtent.XMin - 60000, fcExtent.YMin - 60000, fcExtent.XMax + 60000, fcExtent.YMax + 60000)
         arcpy.AddMessage("\nProcessing extent: " + str(arcpy.env.extent))
-        arcpy.Clip_management(parameters[0].valueAsText, str(arcpy.env.extent), os.path.join(parameters[4].valueAsText, "tempRaster") ,"#", "#", "NONE", "NO_MAINTAIN_EXTENT")
+        arcpy.Clip_management(parameters[0].valueAsText, str(arcpy.env.extent), os.path.join(parameters[4].valueAsText, "tempRaster") ,"#", "#", "NONE", "NO_MAINTAIN_EXTENT"); messages.addGPMessages()
+        arcpy.env.snapRaster = os.path.join(parameters[4].valueAsText, "tempRaster")
 
         # Create Viewsheds
         viewPolygons = arcpy.MakeFeatureLayer_management(os.path.join(parameters[4].valueAsText,"ARD_VIEW_" + parameters[2].valueAsText + "_ViewedLandscapes_projected_py"))
@@ -956,12 +944,15 @@ class CreateViewshed(object):
                 #arcpy.Clip_management(outViewshed, viewPolygons, clippedViewshed, )
                 clippedOutput = ExtractByMask(outViewshed, viewPolygons); messages.addGPMessages()
                 clippedOutput.save(clippedViewshedTemp)
+
                 clippedOutput2 = ExtractByAttributes(clippedOutput, "Value > 0"); messages.addGPMessages()
                 clippedOutput2.save(clippedViewshed); messages.addGPMessages()
+                #arcpy.Copy_management(clippedViewshedTemp, clippedViewshed); messages.addGPMessages()
 
                 # Create visible area polygons and attribute them
                 viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_") + "_View" + str(row[6])) + "_py"
-                arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
+                arcpy.RasterToPolygon_conversion(clippedViewshedTemp, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
+                #arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
                 arcpy.RepairGeometry_management(tempClipped); messages.addGPMessages()
                 arcpy.Dissolve_management(tempClipped, viewPoly, "gridcode"); messages.addGPMessages()
                 arcpy.RepairGeometry_management(viewPoly); messages.addGPMessages()
@@ -977,34 +968,42 @@ class CreateViewshed(object):
         #del cursor, row
 
         # Create visible areas raster (i.e. composite viewshed) and combined polygons
-        arcpy.env.workspace = parameters[4].valueAsText
         valueTable = arcpy.ValueTable()
         ratExists = True
         pointCount = arcpy.GetCount_management(tempFeatureClassOutput); messages.addGPMessages()
 
         if int(pointCount.getOutput(0)) > 1: # Multiple viewpoints
             count = 1
+            arcpy.env.workspace = parameters[4].valueAsText
             #rasterSearchString = viewshedRoot + "_*"
-            rasterSearchString = viewshedRootClippedTemp + "_*"
+            rasterSearchString = viewshedRootClipped + "_*"
+            #rasterSearchString = viewshedRootClippedTemp + "_*"
             visibleAreasSearchString = "ARD_VIEW_" + parameters[2].valueAsText + "_VisibleArea_*_py"
             #rasterSearchString = "*"+parameters[2].valueAsText+"_Viewshed_*"
             rasters = arcpy.ListRasters(rasterSearchString)
             arcpy.AddMessage("\nSearched for " + rasterSearchString + " and processing " + str(len(rasters))+ " to create " + compositeViewshed)
             for ras in rasters:
-                if count == 1: cv = arcpy.Raster(ras); arcpy.AddMessage("\nStarted visible areas raster: added "+ ras + " with count: " + str(count))
-                else: cv = Plus(cv, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster" + " with count: " + str(count))
-                #else: cv = cv + arcpy.Raster(ras); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster")
+                if count == 1:
+                    cv = Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nStarted visible areas raster: added "+ ras + " with count: " + str(count))
+                    #cv = arcpy.Raster(ras); arcpy.AddMessage("\nStarted visible areas raster: added "+ ras + " with count: " + str(count))
+                #else: cv = Plus(cv, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster" + " with count: " + str(count))
+                else:
+                    #cv = Con(IsNull(arcpy.Raster(ras)), 0, cv)
+                    #arcpy.gp.RasterCalculator_sa("""Con(IsNull("ARD_VIEW_MONO_Clipped_Viewshed_Gambrill_Hill_View1"), 0, ("ARD_VIEW_MONO_Clipped_Viewshed_Brooks_Hill_View1"))""","D:/Workspace/Default.gdb/rastercalc4")
+                    #cv = cv + arcpy.Raster(ras); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
+                    cv = cv + Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
                 count = count + 1
-            cv.save(compositeViewshed)
-            #cv.save(os.path.join(parameters[4].valueAsText, compositeViewshed))
-            for ras in rasters:
-                arcpy.Delete_management(ras)
+            #cv.save(compositeViewshed)
+            cv.save(os.path.join(parameters[4].valueAsText, compositeViewshed))
+##            for ras in rasters:
+##                arcpy.Delete_management(ras)
             #ratExists = cv.hasRAT
 
             visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
             arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
             for visArea in visAreas:
                 valueTable.addRow(visArea); messages.addGPMessages()
+            #arcpy.AddMessage("Rows in ValueTable: " + str(valueTable.rowCount))
         else: # Only one viewpoint (like SCBL)
             arcpy.CopyRaster_management(clippedViewshed, os.path.join(parameters[4].valueAsText, compositeViewshed)); messages.addGPMessages()
 
