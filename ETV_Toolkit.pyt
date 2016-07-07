@@ -976,8 +976,8 @@ class CreateViewshed(object):
             count = 1
             arcpy.env.workspace = parameters[4].valueAsText
             #rasterSearchString = viewshedRoot + "_*"
-            rasterSearchString = viewshedRootClipped + "_*"
-            #rasterSearchString = viewshedRootClippedTemp + "_*"
+            #rasterSearchString = viewshedRootClipped + "_*"
+            rasterSearchString = viewshedRootClippedTemp + "_*"
             visibleAreasSearchString = "ARD_VIEW_" + parameters[2].valueAsText + "_VisibleArea_*_py"
             #rasterSearchString = "*"+parameters[2].valueAsText+"_Viewshed_*"
             rasters = arcpy.ListRasters(rasterSearchString)
