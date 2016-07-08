@@ -33,7 +33,10 @@
 #       Update date: 20160526 LN - fixed bug when special chars in viewpoint name
 #                                   and added save of source lookup table to ViewBearings tool
 #       Update date: 20160609 LN - added logic for visible areas unioning
+#       Update date: 20160707 LN - fixed bug with viewed landscapes and added visible areas logic
+#       Update date: 20160708 LN - fixed another bug with special chars in viewpoint name
 #
+#   TO DO: add Argonne logic on composites
 #
 #   Credits:
 #       View polygon logic adapted from ETV app javascript code
@@ -934,13 +937,13 @@ class CreateViewshed(object):
                 arcpy.CopyFeatures_management(newPtOutput, tempPtClassOutput); messages.addGPMessages()
                 arcpy.RepairGeometry_management(tempPtClassOutput); messages.addGPMessages()
 
-                outViewshed = os.path.join(parameters[4].valueAsText, viewshedRoot + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_") + "_View" + str(row[6]))
+                outViewshed = os.path.join(parameters[4].valueAsText, viewshedRoot + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
                 arcpy.Viewshed_3d(os.path.join(parameters[4].valueAsText, "tempRaster"), tempPtClassOutput, outViewshed, "1", "CURVED_EARTH"); messages.addGPMessages()
 
                 # Clip viewshed to view
-                clippedViewshed = os.path.join(parameters[4].valueAsText, viewshedRootClipped + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_") + "_View" + str(row[6]))
-                clippedViewshedTemp = os.path.join(parameters[4].valueAsText, viewshedRootClippedTemp + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_") + "_View" + str(row[6]))
-                arcpy.SelectLayerByAttribute_management(viewPolygons, "NEW_SELECTION", "ViewpointName = '" + row[4] + "'"); messages.addGPMessages()
+                clippedViewshed = os.path.join(parameters[4].valueAsText, viewshedRootClipped + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
+                clippedViewshedTemp = os.path.join(parameters[4].valueAsText, viewshedRootClippedTemp + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
+                arcpy.SelectLayerByAttribute_management(viewPolygons, "NEW_SELECTION", "ViewpointName = '" + row[4].replace("'", "''") + "'"); messages.addGPMessages()
                 #arcpy.Clip_management(outViewshed, viewPolygons, clippedViewshed, )
                 clippedOutput = ExtractByMask(outViewshed, viewPolygons); messages.addGPMessages()
                 clippedOutput.save(clippedViewshedTemp)
@@ -950,14 +953,14 @@ class CreateViewshed(object):
                 #arcpy.Copy_management(clippedViewshedTemp, clippedViewshed); messages.addGPMessages()
 
                 # Create visible area polygons and attribute them
-                viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_") + "_View" + str(row[6])) + "_py"
+                viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6])) + "_py"
                 arcpy.RasterToPolygon_conversion(clippedViewshedTemp, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
                 #arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
                 arcpy.RepairGeometry_management(tempClipped); messages.addGPMessages()
                 arcpy.Dissolve_management(tempClipped, viewPoly, "gridcode"); messages.addGPMessages()
                 arcpy.RepairGeometry_management(viewPoly); messages.addGPMessages()
                 arcpy.AddField_management(viewPoly,"ViewpointName","TEXT", "", "", 255, "ViewpointName", "NULLABLE"); messages.addGPMessages()
-                arcpy.CalculateField_management(viewPoly, "ViewpointName", "'" + row[4] + "'", "PYTHON_9.3"); messages.addGPMessages()
+                arcpy.CalculateField_management(viewPoly, "ViewpointName", "'" + row[4].replace("'", "''") + "'", "PYTHON_9.3"); messages.addGPMessages()
                 arcpy.JoinField_management(viewPoly,"ViewpointName",viewPolygons,"ViewpointName", joinFields); messages.addGPMessages()
                 arcpy.DeleteField_management(viewPoly,["Id","gridcode"]); messages.addGPMessages()
 
@@ -995,8 +998,8 @@ class CreateViewshed(object):
                 count = count + 1
             #cv.save(compositeViewshed)
             cv.save(os.path.join(parameters[4].valueAsText, compositeViewshed))
-##            for ras in rasters:
-##                arcpy.Delete_management(ras)
+            for ras in rasters:
+                arcpy.Delete_management(ras)
             #ratExists = cv.hasRAT
 
             visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
