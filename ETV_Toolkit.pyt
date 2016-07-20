@@ -35,6 +35,7 @@
 #       Update date: 20160609 LN - added logic for visible areas unioning
 #       Update date: 20160707 LN - fixed bug with viewed landscapes and added visible areas logic
 #       Update date: 20160708 LN - fixed another bug with special chars in viewpoint name
+#       Update date: 20160720 LN - tested in ArcGIS 10.3.1; still need to add in Argonne logic
 #
 #   TO DO: add Argonne logic on composites
 #
@@ -948,14 +949,14 @@ class CreateViewshed(object):
                 clippedOutput = ExtractByMask(outViewshed, viewPolygons); messages.addGPMessages()
                 clippedOutput.save(clippedViewshedTemp)
 
-                clippedOutput2 = ExtractByAttributes(clippedOutput, "Value > 0"); messages.addGPMessages()
+                clippedOutput2 = ExtractByAttributes(clippedViewshedTemp, "Value > 0"); messages.addGPMessages()
                 clippedOutput2.save(clippedViewshed); messages.addGPMessages()
                 #arcpy.Copy_management(clippedViewshedTemp, clippedViewshed); messages.addGPMessages()
 
                 # Create visible area polygons and attribute them
                 viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6])) + "_py"
-                arcpy.RasterToPolygon_conversion(clippedViewshedTemp, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
-                #arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
+                #arcpy.RasterToPolygon_conversion(clippedViewshedTemp, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
+                arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
                 arcpy.RepairGeometry_management(tempClipped); messages.addGPMessages()
                 arcpy.Dissolve_management(tempClipped, viewPoly, "gridcode"); messages.addGPMessages()
                 arcpy.RepairGeometry_management(viewPoly); messages.addGPMessages()
