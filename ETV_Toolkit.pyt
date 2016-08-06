@@ -1078,6 +1078,7 @@ class CreateViewshed(object):
         #del rowComp, cursorComp
 
         arcpy.AddMessage("\n Calculating SIV fields")
+        newCompSQ = 4
         cursorSIV = arcpy.UpdateCursor(unionedVisibleAreas)
         for rowSIV in cursorSIV:
             compSQ = rowSIV.getValue('cSQ')
@@ -1092,12 +1093,13 @@ class CreateViewshed(object):
             elif compSQ == 'E':
                 newCompSQ = 4
             compSQ = newCompSQ
-            compVI = rowSIV['cVI'] - 1
+            compVI = int(rowSIV.getValue("cVI")) - 1
             compSIV = sivMatrix[compSQ][compVI]
             rowSIV.setValue("SIV", compSIV)
             cursorSIV.updateRow(rowSIV)
 
         attList = arcpy.ListFields(unionedVisibleAreas, 'FID*')
+        lyrCount = 0
         cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
         for rowCount in cursorCount:
             for att in attList:
