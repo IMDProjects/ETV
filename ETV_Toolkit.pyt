@@ -873,6 +873,11 @@ class CreateViewshed(object):
 
         joinFields = ["ViewpointID","ViewConeID","ViewID","UNIT_CODE","ViewedLandscapeNumber","ViewNumber", "Longitude","Latitude","LeftBearing", "RightBearing","ScenicQualityRating","ViewImportanceRating","ScenicInventoryValue"]
 
+        sivMatrix = [['VH','VH','VH','H','M'],['VH','VH','H','M','L'],['H','H','M','L','L'],['H','M','L','VL','VL'],\
+             ['M','L','VL','VL','VL']]
+        sivFieldList = ["ScenicInventoryValue","ScenicInventoryRanking"]
+
+
         WGSSpatialRef = arcpy.SpatialReference(4326)
         AlbersSpatialRef = arcpy.SpatialReference(102039)
         # Match output spatial reference to input DEM
@@ -1029,7 +1034,87 @@ class CreateViewshed(object):
         arcpy.Intersect_analysis(valueTable, intersectedVisibleAreas, "ALL"); messages.addGPMessages()
         arcpy.RepairGeometry_management(intersectedVisibleAreas); messages.addGPMessages()
 
-##        # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
+        # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
+        # Use unioned polys and use lookup matrix to populate SIV (as individual visible areas feature class)
+        # Add fields and populate
+        allFields = arcpy.ListFields(unionedVisibleAreas)
+        fieldCount = int(len(allFields))
+        arcpy.AddField_management(unionedVisibleAreas, "cSQ", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "cVI", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "SIV", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "ViewCount", "INTEGER", "", "", "", "", "NULLABLE"); messages.addGPMessages()
+
+        arcpy.AddMessage("\n Calculating temporary SIV fields")
+        sqAttList = arcpy.ListFields(unionedVisibleAreas, 'ScenicQuality*')
+        viAttList = arcpy.ListFields(unionedVisibleAreas, 'ViewImportance*')
+        cursorComp = arcpy.UpdateCursor(unionedVisibleAreas)
+        for rowComp in cursorComp:
+            newSQ = 'S'
+            for sqAtt in sqAttList:
+                sqValue = rowComp.getValue(sqAtt.name)
+                if sqValue == ' ':
+                    break
+                elif sqValue == 'A':
+                    newSQ = 'A'
+                elif sqValue == 'B' and not newSQ == 'A':
+                    newSQ = 'B'
+                elif sqValue == 'C' and not newSQ in('A','B'):
+                    newSQ = 'C'
+                elif sqValue == 'D' and not newSQ in('A','B','C'):
+                    newSQ = 'D'
+                elif sqValue == 'E' and not newSQ in('A','B','C','D'):
+                    newSQ = 'E'
+            rowComp.setValue("cSQ", newSQ)
+            #rowComp['cSQ'] = newSQ
+            #rowComp[fieldCount+1] = newSQ
+
+            newVI = 10
+            for viAtt in viAttList:
+                viValue = rowComp.getValue(viAtt.name)
+                for i in range(1,6):
+                    if viValue == i and viValue <= newVI:
+                        newVI = i
+            rowComp.setValue("cVI", newVI)
+        #del rowComp, cursorComp
+
+        arcpy.AddMessage("\n Calculating SIV fields")
+        cursorSIV = arcpy.UpdateCursor(unionedVisibleAreas)
+        for rowSIV in cursorSIV:
+            compSQ = rowSIV.getValue('cSQ')
+            if compSQ == 'A':
+                newCompSQ = 0
+            elif compSQ == 'B':
+                newCompSQ = 1
+            elif compSQ == 'C':
+                newCompSQ = 2
+            elif compSQ == 'D':
+                newCompSQ = 3
+            elif compSQ == 'E':
+                newCompSQ = 4
+            compSQ = newCompSQ
+            compVI = rowSIV['cVI'] - 1
+            compSIV = sivMatrix[compSQ][compVI]
+            rowSIV.setValue("SIV", compSIV)
+            cursorSIV.updateRow(rowSIV)
+
+        attList = arcpy.ListFields(unionedVisibleAreas, 'FID*')
+        cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
+        for rowCount in cursorCount:
+            for att in attList:
+                if int(rowCount[att.name]) >= int(1):
+                    lyrCount += 1
+            rowCount.setValue("ViewCount", lyrCount)
+            cursorCount.updateRow(rowCount)
+            lyrCount = 0
+
+        arcpy.AddMessage("\n Creating SIV polygons")
+        for att in attList:
+            sivFc = att.name[4:] + '_SIV'
+            #sivFc = att.name[4:-5] + '_SIV'
+            where_clause = '"' + att.name + '" >= 1'
+            arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
+            arcpy.RepairGeometry_management(sivFC); messages.addGPMessages()
+
 ##        polySearchString = viewshedRoot + "_*_py"
 ##        polys = arcpy.ListFeatureClasses(polySearchString)
 ##        arcpy.AddMessage("\nSearched for " + polySearchString + " and processing " + str(len(polys))+ " to calculate cSIV)
@@ -1045,7 +1130,6 @@ class CreateViewshed(object):
 ##
 ##            # Join to viewed landscape feature class and grab SQ and VI values
 
-        # Union polys and use lookup matrix to populate cSIV (in individual polygon feature class and in viewed landscapes feature class
 
         # Compute visibility by observer
         if int(pointCount.getOutput(0)) < 17:
