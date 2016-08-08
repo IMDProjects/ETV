@@ -698,7 +698,7 @@ class CalculateScenicInventoryValues(object):
         idField = "ViewID"
         fieldList = ["ScenicQualityRating","ViewImportanceRating","ScenicInventoryValue","ScenicInventoryRanking"]
         sql = r'select ViewID, SSRS.View_SQRating(ViewID) ScenicQualityRating, SSRS.View_ImportanceRating(ViewID) ViewImportanceRating, SSRS.View_SQRating(ViewID) + SSRS.View_ImportanceRating(ViewID) ScenicInventoryValue from web.ViewBearings'
-        ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'VH','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'H','C2': 'H','C3': 'M','C4': 'L','C5': 'L','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'VL','E4': 'VL','E5': 'VL'}
+        ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'H','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'VH','C2': 'H','C3': 'M','C4': 'L','C5': 'VL','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'L','E4': 'VL','E5': 'VL'}
 
         # Add fields to feature class
         # Cursor through features, calculating fields:
@@ -873,7 +873,7 @@ class CreateViewshed(object):
 
         joinFields = ["ViewpointID","ViewConeID","ViewID","UNIT_CODE","ViewedLandscapeNumber","ViewNumber", "Longitude","Latitude","LeftBearing", "RightBearing","ScenicQualityRating","ViewImportanceRating","ScenicInventoryValue"]
 
-        sivMatrix = [['VH','VH','VH','H','M'],['VH','VH','H','M','L'],['H','H','M','L','L'],['H','M','L','VL','VL'],\
+        compositeSivMatrix = [['VH','VH','VH','H','M'],['VH','VH','H','M','L'],['H','H','M','L','L'],['H','M','L','VL','VL'],\
              ['M','L','VL','VL','VL']]
         sivFieldList = ["ScenicInventoryValue","ScenicInventoryRanking"]
 
@@ -1030,9 +1030,9 @@ class CreateViewshed(object):
 
         arcpy.Union_analysis(valueTable, unionedVisibleAreas); messages.addGPMessages()
         arcpy.RepairGeometry_management(unionedVisibleAreas); messages.addGPMessages()
-        arcpy.env.extent = arcpy.Describe(unionedVisibleAreas).extent
-        arcpy.Intersect_analysis(valueTable, intersectedVisibleAreas, "ALL"); messages.addGPMessages()
-        arcpy.RepairGeometry_management(intersectedVisibleAreas); messages.addGPMessages()
+        #arcpy.env.extent = arcpy.Describe(unionedVisibleAreas).extent
+        #arcpy.Intersect_analysis(valueTable, intersectedVisibleAreas, "ALL"); messages.addGPMessages()
+        #arcpy.RepairGeometry_management(intersectedVisibleAreas); messages.addGPMessages()
 
         # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
         # Use unioned polys and use lookup matrix to populate SIV (as individual visible areas feature class)
@@ -1041,40 +1041,52 @@ class CreateViewshed(object):
         fieldCount = int(len(allFields))
         arcpy.AddField_management(unionedVisibleAreas, "cSQ", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
         arcpy.AddField_management(unionedVisibleAreas, "cVI", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
-        arcpy.AddField_management(unionedVisibleAreas, "SIV", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
-        arcpy.AddField_management(unionedVisibleAreas, "ViewCount", "INTEGER", "", "", "", "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "CompositeSIV", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "ViewCount", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
 
         arcpy.AddMessage("\n Calculating temporary SIV fields")
         sqAttList = arcpy.ListFields(unionedVisibleAreas, 'ScenicQuality*')
         viAttList = arcpy.ListFields(unionedVisibleAreas, 'ViewImportance*')
         cursorComp = arcpy.UpdateCursor(unionedVisibleAreas)
         for rowComp in cursorComp:
-            newSQ = 'S'
+            newSQ = ''
             for sqAtt in sqAttList:
                 sqValue = rowComp.getValue(sqAtt.name)
-                if sqValue == ' ':
-                    break
-                elif sqValue == 'A':
-                    newSQ = 'A'
-                elif sqValue == 'B' and not newSQ == 'A':
-                    newSQ = 'B'
-                elif sqValue == 'C' and not newSQ in('A','B'):
-                    newSQ = 'C'
-                elif sqValue == 'D' and not newSQ in('A','B','C'):
-                    newSQ = 'D'
-                elif sqValue == 'E' and not newSQ in('A','B','C','D'):
-                    newSQ = 'E'
+                #check for nulls coming from ETV database
+                if sqValue != '' and len(sqValue) > 0:
+                    sqValue = rowComp.getValue(sqAtt.name)
+                    if sqValue == ' ' or len(sqValue) == 0:
+                        break
+                    elif sqValue == 'A':
+                        newSQ = 'A'
+                    elif sqValue == 'B' and not newSQ == 'A':
+                        newSQ = 'B'
+                    elif sqValue == 'C' and not newSQ in('A','B'):
+                        newSQ = 'C'
+                    elif sqValue == 'D' and not newSQ in('A','B','C'):
+                        newSQ = 'D'
+                    elif sqValue == 'E' and not newSQ in('A','B','C','D'):
+                        newSQ = 'E'
             rowComp.setValue("cSQ", newSQ)
+            arcpy.AddMessage("\n New cSQ == " + newSQ)
             #rowComp['cSQ'] = newSQ
             #rowComp[fieldCount+1] = newSQ
 
             newVI = 10
             for viAtt in viAttList:
-                viValue = rowComp.getValue(viAtt.name)
-                for i in range(1,6):
-                    if viValue == i and viValue <= newVI:
-                        newVI = i
-            rowComp.setValue("cVI", newVI)
+                viValue0 = rowComp.getValue(viAtt.name)
+                #check for nulls coming from ETV database
+                if viValue0 != None and viValue0 != '' and len(viValue0) > 0:
+                    #viValue = int(rowComp.getValue(viAtt.name))
+                    viValue = int(viValue0)
+                    for i in range(1,6):
+                        if viValue == i and viValue <= newVI:
+                            newVI = i
+            if newVI <> 10:
+                rowComp.setValue("cVI", newVI)
+            arcpy.AddMessage("\n New cVI == " + str(newVI))
+            cursorComp.updateRow(rowComp)
+
         #del rowComp, cursorComp
 
         arcpy.AddMessage("\n Calculating SIV fields")
@@ -1093,17 +1105,18 @@ class CreateViewshed(object):
             elif compSQ == 'E':
                 newCompSQ = 4
             compSQ = newCompSQ
-            compVI = int(rowSIV.getValue("cVI")) - 1
-            compSIV = sivMatrix[compSQ][compVI]
-            rowSIV.setValue("SIV", compSIV)
-            cursorSIV.updateRow(rowSIV)
+            if rowSIV.getValue("cVI") != None:
+                compVI = int(rowSIV.getValue("cVI")) - 1
+                compSIV = compositeSivMatrix[compSQ][compVI]
+                rowSIV.setValue("CompositeSIV", compSIV)
+                cursorSIV.updateRow(rowSIV)
 
         attList = arcpy.ListFields(unionedVisibleAreas, 'FID*')
         lyrCount = 0
         cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
         for rowCount in cursorCount:
             for att in attList:
-                if int(rowCount[att.name]) >= int(1):
+                if int(rowCount.getValue(att.name)) >= int(1):
                     lyrCount += 1
             rowCount.setValue("ViewCount", lyrCount)
             cursorCount.updateRow(rowCount)
@@ -1111,11 +1124,39 @@ class CreateViewshed(object):
 
         arcpy.AddMessage("\n Creating SIV polygons")
         for att in attList:
-            sivFc = att.name[4:] + '_SIV'
+            sivFc = att.name[4:-3] + '_CompositeSIV_py'
+            #sivFc = att.name[4:-13] + '_CompositeSIV'
             #sivFc = att.name[4:-5] + '_SIV'
             where_clause = '"' + att.name + '" >= 1'
             arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
-            arcpy.RepairGeometry_management(sivFC); messages.addGPMessages()
+            arcpy.RepairGeometry_management(sivFc); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ViewConeID_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ViewpointID_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ViewID_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "UNIT_CODE_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ViewedLandscapeNumber_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ViewNumber_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "Longitude_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "Latitude_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "LeftBearing_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "RightBearing_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ScenicQualityRating_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ViewImportanceRating_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            delList = arcpy.ListFields(sivFc, "ScenicInventoryValue_*")
+            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            #arcpy.DeleteField_management(sivFc, ["ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]); messages.addGPMessages()
 
 ##        polySearchString = viewshedRoot + "_*_py"
 ##        polys = arcpy.ListFeatureClasses(polySearchString)
