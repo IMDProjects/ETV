@@ -699,7 +699,8 @@ class CalculateScenicInventoryValues(object):
         idField = "ViewID"
         fieldList = ["ScenicQualityRating","ViewImportanceRating","ScenicInventoryValue","ScenicInventoryRanking"]
         sql = r'select ViewID, SSRS.View_SQRating(ViewID) ScenicQualityRating, SSRS.View_ImportanceRating(ViewID) ViewImportanceRating, SSRS.View_SQRating(ViewID) + SSRS.View_ImportanceRating(ViewID) ScenicInventoryValue from web.ViewBearings'
-        ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'H','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'VH','C2': 'H','C3': 'M','C4': 'L','C5': 'VL','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'L','E4': 'VL','E5': 'VL'}
+        ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'VH','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'H','C2': 'H','C3': 'M','C4': 'L','C5': 'L','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'VL','E4': 'VL','E5': 'VL'}
+        #ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'H','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'VH','C2': 'H','C3': 'M','C4': 'L','C5': 'VL','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'L','E4': 'VL','E5': 'VL'}
 
         # Add fields to feature class
         # Cursor through features, calculating fields:
@@ -869,6 +870,7 @@ class CreateViewshed(object):
         compositeViewshed = "ARD_VIEW_" +parameters[2].valueAsText + "_VisibleAreas" # "_VisibleAreas"
         compositeViewshedPolys = "ARD_VIEW_" +parameters[2].valueAsText + "_VisibleAreas_py"
         unionedVisibleAreas = "ARD_VIEW_" +parameters[2].valueAsText + "_UnionedVisibleAreas"
+        unionedSIV = "ARD_VIEW_" +parameters[2].valueAsText + "_CompositeVisibleAreas"
         intersectedVisibleAreas = "ARD_VIEW_" +parameters[2].valueAsText + "_IntersectedVisibleAreas"
         outVisibility = "ARD_VIEW_" +parameters[2].valueAsText + "_Visibility_byObserver"
 
@@ -877,7 +879,6 @@ class CreateViewshed(object):
         compositeSivMatrix = [['VH','VH','VH','H','M'],['VH','VH','H','M','L'],['H','H','M','L','L'],['H','M','L','VL','VL'],\
              ['M','L','VL','VL','VL']]
         sivFieldList = ["ScenicInventoryValue","ScenicInventoryRanking"]
-
 
         WGSSpatialRef = arcpy.SpatialReference(4326)
         AlbersSpatialRef = arcpy.SpatialReference(102039)
@@ -1124,6 +1125,7 @@ class CreateViewshed(object):
             lyrCount = 0
 
         arcpy.AddMessage("\n Creating SIV polygons")
+        sivTable = arcpy.ValueTable()
         for att in attList:
             sivFc = att.name[4:-3] + '_CompositeSIV_py'
             #sivFc = att.name[4:-13] + '_CompositeSIV'
@@ -1131,10 +1133,14 @@ class CreateViewshed(object):
             where_clause = '"' + att.name + '" >= 1'
             arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
             arcpy.RepairGeometry_management(sivFc); messages.addGPMessages()
-            for item in ["ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]:
+            sivTable.addRow(sivFc); messages.addGPMessages()
+            for item in ["FID_*", "ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]:
                 delList = arcpy.ListFields(sivFc, item)
                 for f in delList:
                     arcpy.DeleteField_management(sivFc, f.name); messages.addGPMessages()
+
+        arcpy.Union_analysis(sivTable, unionedSIV); messages.addGPMessages()
+        arcpy.RepairGeometry_management(unionedSIV); messages.addGPMessages()
 
             #arcpy.DeleteField_management(sivFc, ["ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]); messages.addGPMessages()
 
