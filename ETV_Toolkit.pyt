@@ -1130,32 +1130,11 @@ class CreateViewshed(object):
             where_clause = '"' + att.name + '" >= 1'
             arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
             arcpy.RepairGeometry_management(sivFc); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ViewConeID_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ViewpointID_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ViewID_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "UNIT_CODE_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ViewedLandscapeNumber_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ViewNumber_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "Longitude_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "Latitude_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "LeftBearing_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "RightBearing_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ScenicQualityRating_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ViewImportanceRating_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
-            delList = arcpy.ListFields(sivFc, "ScenicInventoryValue_*")
-            arcpy.DeleteField_management(sivFc, delList); messages.addGPMessages()
+            for item in ["ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]:
+                delList = arcpy.ListFields(sivFc, item)
+                for f in delList:
+                    arcpy.DeleteField_management(sivFc, f.name); messages.addGPMessages()
+
             #arcpy.DeleteField_management(sivFc, ["ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]); messages.addGPMessages()
 
 ##        polySearchString = viewshedRoot + "_*_py"
