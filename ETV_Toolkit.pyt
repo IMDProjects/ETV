@@ -36,6 +36,7 @@
 #       Update date: 20160707 LN - fixed bug with viewed landscapes and added visible areas logic
 #       Update date: 20160708 LN - fixed another bug with special chars in viewpoint name
 #       Update date: 20160720 LN - tested in ArcGIS 10.3.1; still need to add in Argonne logic
+#       Update date: 20160810 LN - added composite SIV logic
 #
 #   TO DO: add Argonne logic on composites
 #
