@@ -37,8 +37,7 @@
 #       Update date: 20160708 LN - fixed another bug with special chars in viewpoint name
 #       Update date: 20160720 LN - tested in ArcGIS 10.3.1; still need to add in Argonne logic
 #       Update date: 20160810 LN - added composite SIV logic
-#
-#   TO DO: add Argonne logic on composites
+#       Update date: 20160812 LN - updated metadata imports; ready for v1.0 release
 #
 #   Credits:
 #       View polygon logic adapted from ETV app javascript code
@@ -47,6 +46,8 @@
 #
 #       Viewshed code adapted from scripts for Great Plains Wind Energy Project
 #       written by Kirk Sherrill - IMD contractor (2012-2013)
+#
+#       Composite scenic inventory value logic adapted from a script by Brian Cantwell, Argonne National Laboratory 2015
 #-------------------------------------------------------------------------------
 
 import arcpy
@@ -120,13 +121,22 @@ class CreateBearings(object):
             )
 
         param5 = arcpy.Parameter(
-            displayName = "Folder Containing Metadata Template",
-            name = "metaFolder",
-            datatype = "Folder",
+            displayName = "Metadata Template (*.xml)",
+            name = "metaFile",
+            datatype = "DEFile",
             parameterType = "Optional",
             direction = "Input"
             )
-        param5.value = r"X:\ProjectData\NRSS_ARD\EnjoyTheView\Templates\Metadata"
+        #param5.value = r"X:\ProjectData\NRSS_ARD\EnjoyTheView\Templates\Metadata"
+
+##        param5 = arcpy.Parameter(
+##            displayName = "Folder Containing Metadata Template",
+##            name = "metaFolder",
+##            datatype = "Folder",
+##            parameterType = "Optional",
+##            direction = "Input"
+##            )
+##        #param5.value = r"X:\ProjectData\NRSS_ARD\EnjoyTheView\Templates\Metadata"
 
         params = [param0, param1, param2, param3, param4, param5]
         return params
@@ -292,8 +302,11 @@ class CreateBearings(object):
 
         # Import metadata
         if (parameters[5].valueAsText <> None):
-            arcpy.MetadataImporter_conversion(os.path.join(parameters[5].valueAsText, metadataTemplates[0]), outputGDBFCBearing); messages.addGPMessages()
-            arcpy.MetadataImporter_conversion(os.path.join(parameters[5].valueAsText, metadataTemplates[0]), outputGDBFCBearingProjected); messages.addGPMessages()
+            arcpy.MetadataImporter_conversion(parameters[5].valueAsText, outputGDBFCBearing); messages.addGPMessages()
+            arcpy.MetadataImporter_conversion(parameters[5].valueAsText, outputGDBFCBearingProjected); messages.addGPMessages()
+            #arcpy.MetadataImporter_conversion(os.path.join(parameters[5].valueAsText, metadataTemplates[0]), outputGDBFCBearing); messages.addGPMessages()
+            #arcpy.MetadataImporter_conversion(os.path.join(parameters[5].valueAsText, metadataTemplates[0]), outputGDBFCBearingProjected); messages.addGPMessages()
+
 
         # Delete items
         itemsToDelete = [outputGDBFCLeftBearing, outputGDBFCRightBearing, outputGDBFCMergeBearing, outputGDBFCInitTemp, tempLayer, newTempLayer]
@@ -326,7 +339,7 @@ class CreateViewedLandscapes(object):
             datatype = "DEWorkspace",
             parameterType = "Required",
             direction = "Input")
-        param1.value = r"D:\Workspace\Default.gdb"
+        #param1.value = r"D:\Workspace\Default.gdb"
 
         param2 = arcpy.Parameter(
             displayName = "Choose a park to process",
@@ -353,13 +366,22 @@ class CreateViewedLandscapes(object):
             )
 
         param5 = arcpy.Parameter(
-            displayName = "Folder Containing Metadata Template",
-            name = "metaFolder",
-            datatype = "Folder",
+            displayName = "Metadata Template (*.xml)",
+            name = "metaFile",
+            datatype = "DEFile",
             parameterType = "Optional",
             direction = "Input"
             )
-        param5.value = r"X:\ProjectData\NRSS_ARD\EnjoyTheView\Templates\Metadata"
+        #param5.value = r"X:\ProjectData\NRSS_ARD\EnjoyTheView\Templates\Metadata"
+
+##        param5 = arcpy.Parameter(
+##            displayName = "Folder Containing Metadata Template",
+##            name = "metaFolder",
+##            datatype = "Folder",
+##            parameterType = "Optional",
+##            direction = "Input"
+##            )
+##        #param5.value = r"X:\ProjectData\NRSS_ARD\EnjoyTheView\Templates\Metadata"
 
         params = [param0, param1, param2, param3, param4, param5]
         return params
@@ -503,7 +525,8 @@ class CreateViewedLandscapes(object):
             arcpy.CalculateField_management(os.path.join(parameters[1].valueAsText,outputFCName), "DateCreated", datestamp); messages.addGPMessages()
 
             if (parameters[5].valueAsText <> None):
-                arcpy.MetadataImporter_conversion(os.path.join(parameters[5].valueAsText, metadataTemplates[0]), os.path.join(parameters[1].valueAsText,outputFCName)); messages.addGPMessages()
+                arcpy.MetadataImporter_conversion(parameters[5].valueAsText, os.path.join(parameters[1].valueAsText,outputFCName)); messages.addGPMessages()
+                #arcpy.MetadataImporter_conversion(os.path.join(parameters[5].valueAsText, metadataTemplates[0]), os.path.join(parameters[1].valueAsText,outputFCName)); messages.addGPMessages()
             if count == 1:
                 arcpy.CopyFeatures_management(os.path.join(parameters[1].valueAsText,outputFCName), os.path.join(parameters[1].valueAsText,fullFCName)); messages.addGPMessages()
             else:
@@ -654,6 +677,7 @@ class CalculateScenicInventoryValues(object):
             datatype = "DEWorkspace",
             parameterType = "Required",
             direction = "Input")
+        param1.value = r"Database Connections\ETV_on_INP2300FCVWHIS1_Report_Data_Reader.sde"
 
         params = [param0, param1]
         return params
@@ -786,7 +810,7 @@ class CreateViewshed(object):
             datatype = "DEWorkspace",
             parameterType = "Required",
             direction = "Input")
-        param4.value = r"D:\Workspace\Default.gdb"
+        #param4.value = r"D:\Workspace\Default.gdb"
 
 ##        param5 = arcpy.Parameter(
 ##            displayName = "Output folder for viewshed rasters",
@@ -870,7 +894,7 @@ class CreateViewshed(object):
         compositeViewshed = "ARD_VIEW_" +parameters[2].valueAsText + "_VisibleAreas" # "_VisibleAreas"
         compositeViewshedPolys = "ARD_VIEW_" +parameters[2].valueAsText + "_VisibleAreas_py"
         unionedVisibleAreas = "ARD_VIEW_" +parameters[2].valueAsText + "_UnionedVisibleAreas"
-        unionedSIV = "ARD_VIEW_" +parameters[2].valueAsText + "_CompositeVisibleAreas"
+        mergedSIV = "ARD_VIEW_" +parameters[2].valueAsText + "_CompositeVisibleAreas_py"
         intersectedVisibleAreas = "ARD_VIEW_" +parameters[2].valueAsText + "_IntersectedVisibleAreas"
         outVisibility = "ARD_VIEW_" +parameters[2].valueAsText + "_Visibility_byObserver"
 
@@ -1139,8 +1163,8 @@ class CreateViewshed(object):
                 for f in delList:
                     arcpy.DeleteField_management(sivFc, f.name); messages.addGPMessages()
 
-        arcpy.Union_analysis(sivTable, unionedSIV); messages.addGPMessages()
-        arcpy.RepairGeometry_management(unionedSIV); messages.addGPMessages()
+        arcpy.Merge_management(sivTable, mergedSIV); messages.addGPMessages()
+        arcpy.RepairGeometry_management(mergedSIV); messages.addGPMessages()
 
             #arcpy.DeleteField_management(sivFc, ["ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]); messages.addGPMessages()
 
