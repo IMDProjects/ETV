@@ -38,6 +38,7 @@
 #       Update date: 20160720 LN - tested in ArcGIS 10.3.1; still need to add in Argonne logic
 #       Update date: 20160810 LN - added composite SIV logic
 #       Update date: 20160812 LN - updated metadata imports; ready for v1.0 release
+#       Update date: 20160823 LN - refactored for DB move to ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde
 #
 #   Credits:
 #       View polygon logic adapted from ETV app javascript code
@@ -87,7 +88,7 @@ class CreateBearings(object):
             datatype = "DETable",
             parameterType = "Required",
             direction = "Input")
-        param0.value = r"Database Connections\ETV_on_INP2300FCVWHIS1_Report_Data_Reader.sde\ETV.web.ViewBearings"
+        param0.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
 
         param1 = arcpy.Parameter(
             displayName = "Choose a park to process",
@@ -331,7 +332,7 @@ class CreateViewedLandscapes(object):
             datatype = "DETable",
             parameterType = "Required",
             direction = "Input")
-        param0.value = r"Database Connections\ETV_on_INP2300FCVWHIS1_Report_Data_Reader.sde\ETV.web.ViewBearings"
+        param0.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
 
         param1 = arcpy.Parameter(
             displayName = "Output GeoDatabase",
@@ -677,7 +678,7 @@ class CalculateScenicInventoryValues(object):
             datatype = "DEWorkspace",
             parameterType = "Required",
             direction = "Input")
-        param1.value = r"Database Connections\ETV_on_INP2300FCVWHIS1_Report_Data_Reader.sde"
+        param1.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde"
 
         params = [param0, param1]
         return params
@@ -786,7 +787,7 @@ class CreateViewshed(object):
             datatype = "DETable",
             parameterType = "Required",
             direction = "Input")
-        #param1.value = r"Database Connections\ETV_on_INP2300FCVWHIS1_Report_Data_Reader.sde\ETV.web.ViewBearings"
+        #param1.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
 
         param2 = arcpy.Parameter(
             displayName = "Choose a park to extract",
