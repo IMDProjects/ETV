@@ -39,6 +39,7 @@
 #       Update date: 20160810 LN - added composite SIV logic
 #       Update date: 20160812 LN - updated metadata imports; ready for v1.0 release
 #       Update date: 20160823 LN - refactored for DB move to ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde
+#       Update data: 20160907 lN - bug fixes and altered documentation to use ETV_INPNISCVIRMASQL_IRMA_ETV_Reader.sde
 #
 #   Credits:
 #       View polygon logic adapted from ETV app javascript code
@@ -723,7 +724,7 @@ class CalculateScenicInventoryValues(object):
         viewedLandscapeFC = parameters[0].valueAsText
         idField = "ViewID"
         fieldList = ["ScenicQualityRating","ViewImportanceRating","ScenicInventoryValue","ScenicInventoryRanking"]
-        sql = r'select ViewID, SSRS.View_SQRating(ViewID) ScenicQualityRating, SSRS.View_ImportanceRating(ViewID) ViewImportanceRating, SSRS.View_SQRating(ViewID) + SSRS.View_ImportanceRating(ViewID) ScenicInventoryValue from web.ViewBearings'
+        sql = r'select ViewID, SSRS.View_SQRating(ViewID) ScenicQualityRating, SSRS.View_ImportanceRating(ViewConeID) ViewImportanceRating, SSRS.View_SQRating(ViewID) + SSRS.View_ImportanceRating(ViewConeID) ScenicInventoryValue from web.ViewBearings'
         ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'VH','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'H','C2': 'H','C3': 'M','C4': 'L','C5': 'L','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'VL','E4': 'VL','E5': 'VL'}
         #ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'H','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'VH','C2': 'H','C3': 'M','C4': 'L','C5': 'VL','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'L','E4': 'VL','E5': 'VL'}
 
@@ -910,294 +911,260 @@ class CreateViewshed(object):
         # Match output spatial reference to input DEM
         desc = arcpy.Describe(parameters[0].valueAsText)
         outputSpatialRef = desc.SpatialReference
-
-
-        # Use event layer to make observer (view) points feature class
-        # Direct MakeTableView does not honor the whereClause
-##        with arcpy.da.SearchCursor(parameters[1].valueAsText, "*", whereClause) as cursor:
-##            for row in cursor:
-##                # Write rows to temp table
-##                arcpy.CopyRows_management(row ,os.path.join(parameters[4].valueAsText,sourceView)); messages.addGPMessages()
-
-
-##        with arcpy.da.SearchCursor(parameters[1].value, "*", whereClause) as cursor: #valueAsText
-##            for row in cursor:
-##                # Get viewpoints for park  from database
-##                viewPoints.append([row[7], row[8]])
-##
-##        arcpy.AddMessage("\nviewPoints: " + str(viewPoints))
-##
-##        # Create point feature class from viewpoint array
-##        for vp in viewPoints:
-##            arcpy.AddMessage("\nvp: " + str(vp))
-##            arcpy.AddMessage("\ncoords in vp:" + str(vp[0]) + "," + str(vp[1]))
-##            viewPointFeatures.append(arcpy.PointGeometry(arcpy.Point(vp[0], vp[1]), WGSSpatialRef))
-
-        arcpy.CopyRows_management(parameters[1].value, os.path.join(parameters[4].valueAsText,tempTable)); messages.addGPMessages()
-        arcpy.TableSelect_analysis(os.path.join(parameters[4].valueAsText,tempTable), os.path.join(parameters[4].valueAsText,sourceView), whereClause); messages.addGPMessages()
-
-        arcpy.MakeXYEventLayer_management(os.path.join(parameters[4].valueAsText, sourceView), "Longitude", "Latitude", os.path.join(parameters[4].valueAsText, tempLayer), WGSSpatialRef); messages.addGPMessages()
-        arcpy.CopyFeatures_management(os.path.join(parameters[4].valueAsText, tempLayer), tempFeatureClass); messages.addGPMessages()
-        arcpy.RepairGeometry_management(tempFeatureClass); messages.addGPMessages()
-        arcpy.Project_management(tempFeatureClass, tempFeatureClassOutput, outputSpatialRef); messages.addGPMessages()
-        #arcpy.Project_management(tempFeatureClass, tempFeatureClassOutput, AlbersSpatialRef); messages.addGPMessages()
-        arcpy.RepairGeometry_management(tempFeatureClassOutput); messages.addGPMessages()
-
-        # Set processing extent to view point feature class extent +/- 60000 meters
-        # Clip source DEM to park extent
-        arcpy.MinimumBoundingGeometry_management(tempFeatureClassOutput, os.path.join(parameters[4].valueAsText, "mbr"), "RECTANGLE_BY_AREA", "ALL"); messages.addGPMessages()
-        fcExtent = arcpy.Describe(os.path.join(parameters[4].valueAsText, "mbr")).extent
-        # Assumes source DEM spatial reference is projected (in meters)
-        arcpy.env.extent = arcpy.Extent(fcExtent.XMin - 60000, fcExtent.YMin - 60000, fcExtent.XMax + 60000, fcExtent.YMax + 60000)
-        arcpy.AddMessage("\nProcessing extent: " + str(arcpy.env.extent))
-        arcpy.Clip_management(parameters[0].valueAsText, str(arcpy.env.extent), os.path.join(parameters[4].valueAsText, "tempRaster") ,"#", "#", "NONE", "NO_MAINTAIN_EXTENT"); messages.addGPMessages()
-        arcpy.env.snapRaster = os.path.join(parameters[4].valueAsText, "tempRaster")
-
-        # Create Viewsheds
+        # Check that DEM spatial reference matches that of the
+        # viewPolygons feature class ("ARD_VIEW_" + parameters[2].valueAsText + "_ViewedLandscapes_projected_py")
         viewPolygons = arcpy.MakeFeatureLayer_management(os.path.join(parameters[4].valueAsText,"ARD_VIEW_" + parameters[2].valueAsText + "_ViewedLandscapes_projected_py"))
-        # Loop through park viewpoints, creating binary viewsheds using clipped DEM
-        with arcpy.da.SearchCursor(parameters[1].valueAsText, "*", whereClause) as cursor:
-            for row in cursor:
-                ptFeature = []
-                arcpy.AddMessage("\n\nPoint for viewshed: " + str(row[7]) + ", "  + str(row[8]))
-                newPt = arcpy.PointGeometry(arcpy.Point(row[7], row[8]), WGSSpatialRef) # setting explicit variable required
-                ptFeature.append(newPt)
-                #arcpy.AddMessage("\n\nPoints in ptFeature: " + ptFeature[0].WKT)
+        vpDesc = arcpy.Describe(viewPolygons)
+        vpSpatialRef = vpDesc.SpatialReference
 
-                # Project to Albers and make it a feature class
-                newPtOutput = newPt.projectAs(outputSpatialRef); messages.addGPMessages()
-                #newPtAlbers = newPt.projectAs(AlbersSpatialRef); messages.addGPMessages()
-                arcpy.CopyFeatures_management(newPtOutput, tempPtClassOutput); messages.addGPMessages()
-                arcpy.RepairGeometry_management(tempPtClassOutput); messages.addGPMessages()
+        if (outputSpatialRef.name == vpSpatialRef.name):
+            # Use event layer to make observer (view) points feature class
+            # Direct MakeTableView does not honor the whereClause
+            arcpy.CopyRows_management(parameters[1].value, os.path.join(parameters[4].valueAsText,tempTable)); messages.addGPMessages()
+            arcpy.TableSelect_analysis(os.path.join(parameters[4].valueAsText,tempTable), os.path.join(parameters[4].valueAsText,sourceView), whereClause); messages.addGPMessages()
 
-                outViewshed = os.path.join(parameters[4].valueAsText, viewshedRoot + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
-                arcpy.Viewshed_3d(os.path.join(parameters[4].valueAsText, "tempRaster"), tempPtClassOutput, outViewshed, "1", "CURVED_EARTH"); messages.addGPMessages()
+            arcpy.MakeXYEventLayer_management(os.path.join(parameters[4].valueAsText, sourceView), "Longitude", "Latitude", os.path.join(parameters[4].valueAsText, tempLayer), WGSSpatialRef); messages.addGPMessages()
+            arcpy.CopyFeatures_management(os.path.join(parameters[4].valueAsText, tempLayer), tempFeatureClass); messages.addGPMessages()
+            arcpy.RepairGeometry_management(tempFeatureClass); messages.addGPMessages()
+            arcpy.Project_management(tempFeatureClass, tempFeatureClassOutput, outputSpatialRef); messages.addGPMessages()
+            #arcpy.Project_management(tempFeatureClass, tempFeatureClassOutput, AlbersSpatialRef); messages.addGPMessages()
+            arcpy.RepairGeometry_management(tempFeatureClassOutput); messages.addGPMessages()
 
-                # Clip viewshed to view
-                clippedViewshed = os.path.join(parameters[4].valueAsText, viewshedRootClipped + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
-                clippedViewshedTemp = os.path.join(parameters[4].valueAsText, viewshedRootClippedTemp + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
-                arcpy.SelectLayerByAttribute_management(viewPolygons, "NEW_SELECTION", "ViewpointName = '" + row[4].replace("'", "''") + "'"); messages.addGPMessages()
-                #arcpy.Clip_management(outViewshed, viewPolygons, clippedViewshed, )
-                clippedOutput = ExtractByMask(outViewshed, viewPolygons); messages.addGPMessages()
-                clippedOutput.save(clippedViewshedTemp)
+            # Set processing extent to view point feature class extent +/- 60000 meters
+            # Clip source DEM to park extent
+            arcpy.MinimumBoundingGeometry_management(tempFeatureClassOutput, os.path.join(parameters[4].valueAsText, "mbr"), "RECTANGLE_BY_AREA", "ALL"); messages.addGPMessages()
+            fcExtent = arcpy.Describe(os.path.join(parameters[4].valueAsText, "mbr")).extent
+            # Assumes source DEM spatial reference is projected (in meters)
+            arcpy.env.extent = arcpy.Extent(fcExtent.XMin - 60000, fcExtent.YMin - 60000, fcExtent.XMax + 60000, fcExtent.YMax + 60000)
+            arcpy.AddMessage("\nProcessing extent: " + str(arcpy.env.extent))
+            arcpy.Clip_management(parameters[0].valueAsText, str(arcpy.env.extent), os.path.join(parameters[4].valueAsText, "tempRaster") ,"#", "#", "NONE", "NO_MAINTAIN_EXTENT"); messages.addGPMessages()
+            arcpy.env.snapRaster = os.path.join(parameters[4].valueAsText, "tempRaster")
 
-                clippedOutput2 = ExtractByAttributes(clippedViewshedTemp, "Value > 0"); messages.addGPMessages()
-                clippedOutput2.save(clippedViewshed); messages.addGPMessages()
-                #arcpy.Copy_management(clippedViewshedTemp, clippedViewshed); messages.addGPMessages()
+            # Create Viewsheds
+            # Loop through park viewpoints, creating binary viewsheds using clipped DEM
+            with arcpy.da.SearchCursor(parameters[1].valueAsText, "*", whereClause) as cursor:
+                for row in cursor:
+                    ptFeature = []
+                    arcpy.AddMessage("\n\nPoint for viewshed: " + str(row[7]) + ", "  + str(row[8]))
+                    newPt = arcpy.PointGeometry(arcpy.Point(row[7], row[8]), WGSSpatialRef) # setting explicit variable required
+                    ptFeature.append(newPt)
+                    #arcpy.AddMessage("\n\nPoints in ptFeature: " + ptFeature[0].WKT)
 
-                # Create visible area polygons and attribute them
-                viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6])) + "_py"
-                #arcpy.RasterToPolygon_conversion(clippedViewshedTemp, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
-                arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
-                arcpy.RepairGeometry_management(tempClipped); messages.addGPMessages()
-                arcpy.Dissolve_management(tempClipped, viewPoly, "gridcode"); messages.addGPMessages()
-                arcpy.RepairGeometry_management(viewPoly); messages.addGPMessages()
-                arcpy.AddField_management(viewPoly,"ViewpointName","TEXT", "", "", 255, "ViewpointName", "NULLABLE"); messages.addGPMessages()
-                arcpy.CalculateField_management(viewPoly, "ViewpointName", "'" + row[4].replace("'", "''") + "'", "PYTHON_9.3"); messages.addGPMessages()
-                arcpy.JoinField_management(viewPoly,"ViewpointName",viewPolygons,"ViewpointName", joinFields); messages.addGPMessages()
-                arcpy.DeleteField_management(viewPoly,["Id","gridcode"]); messages.addGPMessages()
+                    # Project to Albers and make it a feature class
+                    newPtOutput = newPt.projectAs(outputSpatialRef); messages.addGPMessages()
+                    #newPtAlbers = newPt.projectAs(AlbersSpatialRef); messages.addGPMessages()
+                    arcpy.CopyFeatures_management(newPtOutput, tempPtClassOutput); messages.addGPMessages()
+                    arcpy.RepairGeometry_management(tempPtClassOutput); messages.addGPMessages()
 
-                arcpy.SelectLayerByAttribute_management(viewPolygons, "CLEAR_SELECTION"); messages.addGPMessages()
+                    outViewshed = os.path.join(parameters[4].valueAsText, viewshedRoot + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
+                    arcpy.Viewshed_3d(os.path.join(parameters[4].valueAsText, "tempRaster"), tempPtClassOutput, outViewshed, "1", "CURVED_EARTH"); messages.addGPMessages()
 
-                arcpy.Delete_management(tempPtClassOutput); messages.addGPMessages()
-                arcpy.Delete_management("in_memory"); messages.addGPMessages()
-        #del cursor, row
+                    # Clip viewshed to view
+                    clippedViewshed = os.path.join(parameters[4].valueAsText, viewshedRootClipped + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
+                    clippedViewshedTemp = os.path.join(parameters[4].valueAsText, viewshedRootClippedTemp + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
+                    arcpy.SelectLayerByAttribute_management(viewPolygons, "NEW_SELECTION", "ViewpointName = '" + row[4].replace("'", "''") + "'"); messages.addGPMessages()
+                    #arcpy.Clip_management(outViewshed, viewPolygons, clippedViewshed, )
+                    clippedOutput = ExtractByMask(outViewshed, viewPolygons); messages.addGPMessages()
+                    clippedOutput.save(clippedViewshedTemp)
 
-        # Create visible areas raster (i.e. composite viewshed) and combined polygons
-        valueTable = arcpy.ValueTable()
-        ratExists = True
-        pointCount = arcpy.GetCount_management(tempFeatureClassOutput); messages.addGPMessages()
+                    clippedOutput2 = ExtractByAttributes(clippedViewshedTemp, "Value > 0"); messages.addGPMessages()
+                    clippedOutput2.save(clippedViewshed); messages.addGPMessages()
+                    #arcpy.Copy_management(clippedViewshedTemp, clippedViewshed); messages.addGPMessages()
 
-        if int(pointCount.getOutput(0)) > 1: # Multiple viewpoints
-            count = 1
+                    # Create visible area polygons and attribute them
+                    viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6])) + "_py"
+                    #arcpy.RasterToPolygon_conversion(clippedViewshedTemp, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
+                    arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
+                    arcpy.RepairGeometry_management(tempClipped); messages.addGPMessages()
+                    arcpy.Dissolve_management(tempClipped, viewPoly, "gridcode"); messages.addGPMessages()
+                    arcpy.RepairGeometry_management(viewPoly); messages.addGPMessages()
+                    arcpy.AddField_management(viewPoly,"ViewpointName","TEXT", "", "", 255, "ViewpointName", "NULLABLE"); messages.addGPMessages()
+                    arcpy.CalculateField_management(viewPoly, "ViewpointName", "'" + row[4].replace("'", "''") + "'", "PYTHON_9.3"); messages.addGPMessages()
+                    arcpy.JoinField_management(viewPoly,"ViewpointName",viewPolygons,"ViewpointName", joinFields); messages.addGPMessages()
+                    arcpy.DeleteField_management(viewPoly,["Id","gridcode"]); messages.addGPMessages()
+
+                    arcpy.SelectLayerByAttribute_management(viewPolygons, "CLEAR_SELECTION"); messages.addGPMessages()
+
+                    arcpy.Delete_management(tempPtClassOutput); messages.addGPMessages()
+                    arcpy.Delete_management("in_memory"); messages.addGPMessages()
+            #del cursor, row
+
+            # Create visible areas raster (i.e. composite viewshed) and combined polygons
             arcpy.env.workspace = parameters[4].valueAsText
-            #rasterSearchString = viewshedRoot + "_*"
-            #rasterSearchString = viewshedRootClipped + "_*"
+            valueTable = arcpy.ValueTable()
             rasterSearchString = viewshedRootClippedTemp + "_*"
             visibleAreasSearchString = "ARD_VIEW_" + parameters[2].valueAsText + "_VisibleArea_*_py"
-            #rasterSearchString = "*"+parameters[2].valueAsText+"_Viewshed_*"
-            rasters = arcpy.ListRasters(rasterSearchString)
-            arcpy.AddMessage("\nSearched for " + rasterSearchString + " and processing " + str(len(rasters))+ " to create " + compositeViewshed)
-            for ras in rasters:
-                if count == 1:
-                    cv = Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nStarted visible areas raster: added "+ ras + " with count: " + str(count))
-                    #cv = arcpy.Raster(ras); arcpy.AddMessage("\nStarted visible areas raster: added "+ ras + " with count: " + str(count))
-                #else: cv = Plus(cv, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster" + " with count: " + str(count))
-                else:
-                    #cv = Con(IsNull(arcpy.Raster(ras)), 0, cv)
-                    #arcpy.gp.RasterCalculator_sa("""Con(IsNull("ARD_VIEW_MONO_Clipped_Viewshed_Gambrill_Hill_View1"), 0, ("ARD_VIEW_MONO_Clipped_Viewshed_Brooks_Hill_View1"))""","D:/Workspace/Default.gdb/rastercalc4")
-                    #cv = cv + arcpy.Raster(ras); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
-                    cv = cv + Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
-                count = count + 1
-            #cv.save(compositeViewshed)
-            cv.save(os.path.join(parameters[4].valueAsText, compositeViewshed))
+            pointCount = arcpy.GetCount_management(tempFeatureClassOutput); messages.addGPMessages()
+
+            if int(pointCount.getOutput(0)) > 1: # Multiple viewpoints
+                count = 1
+                rasters = arcpy.ListRasters(rasterSearchString)
+                arcpy.AddMessage("\nSearched for " + rasterSearchString + " and processing " + str(len(rasters))+ " to create " + compositeViewshed)
+                for ras in rasters:
+                    if count == 1:
+                        cv = Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nStarted visible areas raster: added "+ ras + " with count: " + str(count))
+                        #cv = arcpy.Raster(ras); arcpy.AddMessage("\nStarted visible areas raster: added "+ ras + " with count: " + str(count))
+                    #else: cv = Plus(cv, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster" + " with count: " + str(count))
+                    else:
+                        #cv = Con(IsNull(arcpy.Raster(ras)), 0, cv)
+                        #arcpy.gp.RasterCalculator_sa("""Con(IsNull("ARD_VIEW_MONO_Clipped_Viewshed_Gambrill_Hill_View1"), 0, ("ARD_VIEW_MONO_Clipped_Viewshed_Brooks_Hill_View1"))""","D:/Workspace/Default.gdb/rastercalc4")
+                        #cv = cv + arcpy.Raster(ras); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
+                        cv = cv + Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
+                    count = count + 1
+                cv.save(os.path.join(parameters[4].valueAsText, compositeViewshed))
+                #for ras in rasters:
+                 #   arcpy.Delete_management(ras)
+
+                visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
+                arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
+                for visArea in visAreas:
+                    valueTable.addRow(visArea); messages.addGPMessages()
+                #arcpy.AddMessage("Rows in ValueTable: " + str(valueTable.rowCount))
+            else: # Only one viewpoint (like SCBL)
+                arcpy.CopyRaster_management(clippedViewshed, os.path.join(parameters[4].valueAsText, compositeViewshed)); messages.addGPMessages()
+                visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
+                arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
+
             for ras in rasters:
                 arcpy.Delete_management(ras)
-            #ratExists = cv.hasRAT
-
-            visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
-            arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
             for visArea in visAreas:
                 valueTable.addRow(visArea); messages.addGPMessages()
-            #arcpy.AddMessage("Rows in ValueTable: " + str(valueTable.rowCount))
-        else: # Only one viewpoint (like SCBL)
-            arcpy.CopyRaster_management(clippedViewshed, os.path.join(parameters[4].valueAsText, compositeViewshed)); messages.addGPMessages()
 
-        #if ratExists == True:
-        tempViz = ExtractByAttributes(compositeViewshed, "Value > 0"); messages.addGPMessages()
-        #tempViz = ExtractByAttributes(os.path.join(parameters[4].valueAsText, compositeViewshed), "Value > 0"); messages.addGPMessages()
-        tempViz.save(os.path.join(parameters[4].valueAsText, "tempViz"))
-        arcpy.RasterToPolygon_conversion(os.path.join(parameters[4].valueAsText, "tempViz"), os.path.join(parameters[4].valueAsText, "tempVizPolys"), "NO_SIMPLIFY", "Value"); messages.addGPMessages()
-        arcpy.RepairGeometry_management(os.path.join(parameters[4].valueAsText, "tempVizPolys")); messages.addGPMessages()
-        arcpy.Dissolve_management(os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, compositeViewshedPolys), "gridcode"); messages.addGPMessages()
-        arcpy.AlterField_management(os.path.join(parameters[4].valueAsText, compositeViewshedPolys), "gridcode", "VisiblePointCount", "VisiblePointCount"); messages.addGPMessages()
-        arcpy.RepairGeometry_management(os.path.join(parameters[4].valueAsText, compositeViewshedPolys)); messages.addGPMessages()
+            tempViz = ExtractByAttributes(compositeViewshed, "Value > 0"); messages.addGPMessages()
+            tempViz.save(os.path.join(parameters[4].valueAsText, "tempViz"))
+            arcpy.RasterToPolygon_conversion(os.path.join(parameters[4].valueAsText, "tempViz"), os.path.join(parameters[4].valueAsText, "tempVizPolys"), "NO_SIMPLIFY", "Value"); messages.addGPMessages()
+            arcpy.RepairGeometry_management(os.path.join(parameters[4].valueAsText, "tempVizPolys")); messages.addGPMessages()
+            arcpy.Dissolve_management(os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, compositeViewshedPolys), "gridcode"); messages.addGPMessages()
+            arcpy.AlterField_management(os.path.join(parameters[4].valueAsText, compositeViewshedPolys), "gridcode", "VisiblePointCount", "VisiblePointCount"); messages.addGPMessages()
+            arcpy.RepairGeometry_management(os.path.join(parameters[4].valueAsText, compositeViewshedPolys)); messages.addGPMessages()
 
-        #arcpy.AddMessage("\nValueTable: "+str(valueTable))
+            # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
+            if arcpy.Exists(unionedVisibleAreas):
+                arcpy.Delete_management(unionedVisibleAreas); messages.addGPMessages()
+            arcpy.Union_analysis(valueTable, unionedVisibleAreas); messages.addGPMessages()
+            arcpy.RepairGeometry_management(unionedVisibleAreas); messages.addGPMessages()
 
-        arcpy.Union_analysis(valueTable, unionedVisibleAreas); messages.addGPMessages()
-        arcpy.RepairGeometry_management(unionedVisibleAreas); messages.addGPMessages()
-        #arcpy.env.extent = arcpy.Describe(unionedVisibleAreas).extent
-        #arcpy.Intersect_analysis(valueTable, intersectedVisibleAreas, "ALL"); messages.addGPMessages()
-        #arcpy.RepairGeometry_management(intersectedVisibleAreas); messages.addGPMessages()
+            # Use unioned polys and use lookup matrix to populate SIV (as individual visible areas feature class)
+            # Add fields and populate
+            allFields = arcpy.ListFields(unionedVisibleAreas)
+            fieldCount = int(len(allFields))
+            arcpy.AddField_management(unionedVisibleAreas, "cSQ", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
+            arcpy.AddField_management(unionedVisibleAreas, "cVI", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
+            arcpy.AddField_management(unionedVisibleAreas, "CompositeSIV", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
+            arcpy.AddField_management(unionedVisibleAreas, "ViewCount", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
 
-        # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
-        # Use unioned polys and use lookup matrix to populate SIV (as individual visible areas feature class)
-        # Add fields and populate
-        allFields = arcpy.ListFields(unionedVisibleAreas)
-        fieldCount = int(len(allFields))
-        arcpy.AddField_management(unionedVisibleAreas, "cSQ", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
-        arcpy.AddField_management(unionedVisibleAreas, "cVI", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
-        arcpy.AddField_management(unionedVisibleAreas, "CompositeSIV", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
-        arcpy.AddField_management(unionedVisibleAreas, "ViewCount", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
-
-        arcpy.AddMessage("\n Calculating temporary SIV fields")
-        sqAttList = arcpy.ListFields(unionedVisibleAreas, 'ScenicQuality*')
-        viAttList = arcpy.ListFields(unionedVisibleAreas, 'ViewImportance*')
-        cursorComp = arcpy.UpdateCursor(unionedVisibleAreas)
-        for rowComp in cursorComp:
-            newSQ = ''
-            for sqAtt in sqAttList:
-                sqValue = rowComp.getValue(sqAtt.name)
-                #check for nulls coming from ETV database
-                if sqValue != '' and len(sqValue) > 0:
+            arcpy.AddMessage("\n Calculating temporary SIV fields")
+            sqAttList = arcpy.ListFields(unionedVisibleAreas, 'ScenicQuality*')
+            viAttList = arcpy.ListFields(unionedVisibleAreas, 'ViewImportance*')
+            cursorComp = arcpy.UpdateCursor(unionedVisibleAreas)
+            for rowComp in cursorComp:
+                newSQ = ''
+                for sqAtt in sqAttList:
                     sqValue = rowComp.getValue(sqAtt.name)
-                    if sqValue == ' ' or len(sqValue) == 0:
-                        break
-                    elif sqValue == 'A':
-                        newSQ = 'A'
-                    elif sqValue == 'B' and not newSQ == 'A':
-                        newSQ = 'B'
-                    elif sqValue == 'C' and not newSQ in('A','B'):
-                        newSQ = 'C'
-                    elif sqValue == 'D' and not newSQ in('A','B','C'):
-                        newSQ = 'D'
-                    elif sqValue == 'E' and not newSQ in('A','B','C','D'):
-                        newSQ = 'E'
-            rowComp.setValue("cSQ", newSQ)
-            arcpy.AddMessage("\n New cSQ == " + newSQ)
-            #rowComp['cSQ'] = newSQ
-            #rowComp[fieldCount+1] = newSQ
+                    #check for nulls coming from ETV database
+                    if sqValue != '' and len(sqValue) > 0:
+                        sqValue = rowComp.getValue(sqAtt.name)
+                        if sqValue == ' ' or len(sqValue) == 0:
+                            break
+                        elif sqValue == 'A':
+                            newSQ = 'A'
+                        elif sqValue == 'B' and not newSQ == 'A':
+                            newSQ = 'B'
+                        elif sqValue == 'C' and not newSQ in('A','B'):
+                            newSQ = 'C'
+                        elif sqValue == 'D' and not newSQ in('A','B','C'):
+                            newSQ = 'D'
+                        elif sqValue == 'E' and not newSQ in('A','B','C','D'):
+                            newSQ = 'E'
+                rowComp.setValue("cSQ", newSQ)
+                arcpy.AddMessage("\n New cSQ == " + newSQ)
+                #rowComp['cSQ'] = newSQ
+                #rowComp[fieldCount+1] = newSQ
 
-            newVI = 10
-            for viAtt in viAttList:
-                viValue0 = rowComp.getValue(viAtt.name)
-                #check for nulls coming from ETV database
-                if viValue0 != None and viValue0 != '' and len(viValue0) > 0:
-                    #viValue = int(rowComp.getValue(viAtt.name))
-                    viValue = int(viValue0)
-                    for i in range(1,6):
-                        if viValue == i and viValue <= newVI:
-                            newVI = i
-            if newVI <> 10:
-                rowComp.setValue("cVI", newVI)
-            arcpy.AddMessage("\n New cVI == " + str(newVI))
-            cursorComp.updateRow(rowComp)
+                newVI = 10
+                for viAtt in viAttList:
+                    viValue0 = rowComp.getValue(viAtt.name)
+                    #check for nulls coming from ETV database
+                    if viValue0 != None and viValue0 != '' and len(viValue0) > 0:
+                        #viValue = int(rowComp.getValue(viAtt.name))
+                        viValue = int(viValue0)
+                        for i in range(1,6):
+                            if viValue == i and viValue <= newVI:
+                                newVI = i
+                if newVI <> 10:
+                    rowComp.setValue("cVI", newVI)
+                arcpy.AddMessage("\n New cVI == " + str(newVI))
+                cursorComp.updateRow(rowComp)
 
-        #del rowComp, cursorComp
+            #del rowComp, cursorComp
 
-        arcpy.AddMessage("\n Calculating SIV fields")
-        newCompSQ = 4
-        cursorSIV = arcpy.UpdateCursor(unionedVisibleAreas)
-        for rowSIV in cursorSIV:
-            compSQ = rowSIV.getValue('cSQ')
-            if compSQ == 'A':
-                newCompSQ = 0
-            elif compSQ == 'B':
-                newCompSQ = 1
-            elif compSQ == 'C':
-                newCompSQ = 2
-            elif compSQ == 'D':
-                newCompSQ = 3
-            elif compSQ == 'E':
-                newCompSQ = 4
-            compSQ = newCompSQ
-            if rowSIV.getValue("cVI") != None:
-                compVI = int(rowSIV.getValue("cVI")) - 1
-                compSIV = compositeSivMatrix[compSQ][compVI]
-                rowSIV.setValue("CompositeSIV", compSIV)
-                cursorSIV.updateRow(rowSIV)
+            arcpy.AddMessage("\n Calculating SIV fields")
+            newCompSQ = 4
+            cursorSIV = arcpy.UpdateCursor(unionedVisibleAreas)
+            for rowSIV in cursorSIV:
+                compSQ = rowSIV.getValue('cSQ')
+                if compSQ == 'A':
+                    newCompSQ = 0
+                elif compSQ == 'B':
+                    newCompSQ = 1
+                elif compSQ == 'C':
+                    newCompSQ = 2
+                elif compSQ == 'D':
+                    newCompSQ = 3
+                elif compSQ == 'E':
+                    newCompSQ = 4
+                compSQ = newCompSQ
+                if rowSIV.getValue("cVI") != None:
+                    compVI = int(rowSIV.getValue("cVI")) - 1
+                    compSIV = compositeSivMatrix[compSQ][compVI]
+                    rowSIV.setValue("CompositeSIV", compSIV)
+                    cursorSIV.updateRow(rowSIV)
 
-        attList = arcpy.ListFields(unionedVisibleAreas, 'FID*')
-        lyrCount = 0
-        cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
-        for rowCount in cursorCount:
-            for att in attList:
-                if int(rowCount.getValue(att.name)) >= int(1):
-                    lyrCount += 1
-            rowCount.setValue("ViewCount", lyrCount)
-            cursorCount.updateRow(rowCount)
+            attList = arcpy.ListFields(unionedVisibleAreas, 'FID*')
             lyrCount = 0
+            cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
+            for rowCount in cursorCount:
+                for att in attList:
+                    if int(rowCount.getValue(att.name)) >= int(1):
+                        lyrCount += 1
+                rowCount.setValue("ViewCount", lyrCount)
+                cursorCount.updateRow(rowCount)
+                lyrCount = 0
 
-        arcpy.AddMessage("\n Creating SIV polygons")
-        sivTable = arcpy.ValueTable()
-        for att in attList:
-            sivFc = att.name[4:-3] + '_CompositeSIV_py'
-            #sivFc = att.name[4:-13] + '_CompositeSIV'
-            #sivFc = att.name[4:-5] + '_SIV'
-            where_clause = '"' + att.name + '" >= 1'
-            arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
-            arcpy.RepairGeometry_management(sivFc); messages.addGPMessages()
-            sivTable.addRow(sivFc); messages.addGPMessages()
-            for item in ["FID_*", "ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]:
-                delList = arcpy.ListFields(sivFc, item)
-                for f in delList:
-                    arcpy.DeleteField_management(sivFc, f.name); messages.addGPMessages()
+            arcpy.AddMessage("\n Creating SIV polygons")
+            sivTable = arcpy.ValueTable()
+            for att in attList:
+                sivFc = att.name[4:-3] + '_CompositeSIV_py'
+                #sivFc = att.name[4:-13] + '_CompositeSIV'
+                #sivFc = att.name[4:-5] + '_SIV'
+                where_clause = '"' + att.name + '" >= 1'
+                arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
+                arcpy.RepairGeometry_management(sivFc); messages.addGPMessages()
+                sivTable.addRow(sivFc); messages.addGPMessages()
+                for item in ["FID_*", "ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]:
+                    delList = arcpy.ListFields(sivFc, item)
+                    for f in delList:
+                        arcpy.DeleteField_management(sivFc, f.name); messages.addGPMessages()
 
-        arcpy.Merge_management(sivTable, mergedSIV); messages.addGPMessages()
-        arcpy.RepairGeometry_management(mergedSIV); messages.addGPMessages()
+            if arcpy.Exists(mergedSIV):
+                arcpy.Delete_management(mergedSIV); messages.addGPMessages()
+            arcpy.Merge_management(sivTable, mergedSIV); messages.addGPMessages()
+            arcpy.RepairGeometry_management(mergedSIV); messages.addGPMessages()
 
-            #arcpy.DeleteField_management(sivFc, ["ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]); messages.addGPMessages()
+            # Compute visibility by observer
+            if int(pointCount.getOutput(0)) < 17:
+                tempRaster = os.path.join(parameters[4].valueAsText, "tempRaster")
+                arcpy.Visibility_3d(tempRaster, tempFeatureClassOutput, os.path.join(parameters[4].valueAsText, outVisibility), "#", "OBSERVERS", "NODATA", 1, "CURVED_EARTH"); messages.addGPMessages()
 
-##        polySearchString = viewshedRoot + "_*_py"
-##        polys = arcpy.ListFeatureClasses(polySearchString)
-##        arcpy.AddMessage("\nSearched for " + polySearchString + " and processing " + str(len(polys))+ " to calculate cSIV)
-##        for poly in polys:
-##            # Add fields and populate
-##            #for field in fieldList:
-##            #    CreateViewshed.addSIVFields(self, poly, field, "TEXT", 5, messages)
-##            CreateViewshed.addSIVFields(self, poly, "ViewConeID", "SHORT", None, messages)
-##
-##            # Lookup ViewConeID from viewed landscapes feature class based on name (viewshed raster/poly name)
-##
-##            # Populate ViewConeID in individual polygon
-##
-##            # Join to viewed landscape feature class and grab SQ and VI values
-
-
-        # Compute visibility by observer
-        if int(pointCount.getOutput(0)) < 17:
-            tempRaster = os.path.join(parameters[4].valueAsText, "tempRaster")
-            arcpy.Visibility_3d(tempRaster, tempFeatureClassOutput, os.path.join(parameters[4].valueAsText, outVisibility), "#", "OBSERVERS", "NODATA", 1, "CURVED_EARTH"); messages.addGPMessages()
-
-        # Clean up
-        itemsToDelete = [tempFeatureClass, os.path.join(parameters[4].valueAsText, tempTable), os.path.join(parameters[4].valueAsText, sourceView), os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, "tempViz"),os.path.join(parameters[4].valueAsText,"tempClipped")] #tempLayer, tempFeature
-        #itemsToDelete = [tempFeatureClass, os.path.join(parameters[4].valueAsText, "tempRaster"), os.path.join(parameters[4].valueAsText, tempTable), os.path.join(parameters[4].valueAsText, sourceView), os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, "tempViz")] #tempLayer, tempFeature
-        #itemsToDelete = [tempFeatureClass] #tempLayer, tempFeature
-        for item in itemsToDelete:
-            if arcpy.Exists(item):
-                arcpy.Delete_management(item); messages.addGPMessages()
-
+            # Clean up
+            itemsToDelete = [tempFeatureClass, os.path.join(parameters[4].valueAsText, tempTable), os.path.join(parameters[4].valueAsText, sourceView), os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, "tempViz"),os.path.join(parameters[4].valueAsText,"tempClipped")] #tempLayer, tempFeature
+            #itemsToDelete = [tempFeatureClass, os.path.join(parameters[4].valueAsText, "tempRaster"), os.path.join(parameters[4].valueAsText, tempTable), os.path.join(parameters[4].valueAsText, sourceView), os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, "tempViz")] #tempLayer, tempFeature
+            #itemsToDelete = [tempFeatureClass] #tempLayer, tempFeature
+            for item in itemsToDelete:
+                if arcpy.Exists(item):
+                    arcpy.Delete_management(item); messages.addGPMessages()
+        else:
+            arcpy.AddMessage("\n\n **** ERROR ****\n\n\t DEM spatial reference does not match projected viewed landscape polygon feature class. \n\n\tPlease re-project the feature class by re-running the Create Viewed Landscape Polygons tool with a spatial reference that matches the DEM.")
 
 ##def main():
 ##
