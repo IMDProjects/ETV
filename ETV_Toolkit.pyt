@@ -40,6 +40,7 @@
 #       Update date: 20160812 LN - updated metadata imports; ready for v1.0 release
 #       Update date: 20160823 LN - refactored for DB move to ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde
 #       Update data: 20160907 lN - bug fixes and altered documentation to use ETV_INPNISCVIRMASQL_IRMA_ETV_Reader.sde
+#       Update data: 20160908 lN - re-factored Create Viewsheds and Visible Areas into 2 tools (added CalculateCompositeScenicInventoryRanking)
 #
 #   Credits:
 #       View polygon logic adapted from ETV app javascript code
@@ -71,7 +72,7 @@ class Toolbox(object):
         self.alias = ""
 
         # List of tool classes associated with this toolbox
-        self.tools = [CreateBearings, CreateViewedLandscapes, CalculateScenicInventoryValues, CreateViewshed]
+        self.tools = [CreateBearings, CreateViewedLandscapes, CalculateScenicInventoryValues, CreateViewshed, CalculateCompositeScenicInventoryRanking]
         #self.tools = [CreateBearings, CreateViewedLandscapes, CalculateVisiblePointAreas, CalculateScenicInventoryValues, CreateViewshed]
 
 class CreateBearings(object):
@@ -89,7 +90,7 @@ class CreateBearings(object):
             datatype = "DETable",
             parameterType = "Required",
             direction = "Input")
-        param0.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
+        #param0.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
 
         param1 = arcpy.Parameter(
             displayName = "Choose a park to process",
@@ -333,7 +334,7 @@ class CreateViewedLandscapes(object):
             datatype = "DETable",
             parameterType = "Required",
             direction = "Input")
-        param0.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
+        #param0.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
 
         param1 = arcpy.Parameter(
             displayName = "Output GeoDatabase",
@@ -679,7 +680,7 @@ class CalculateScenicInventoryValues(object):
             datatype = "DEWorkspace",
             parameterType = "Required",
             direction = "Input")
-        param1.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde"
+        #param1.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde"
 
         params = [param0, param1]
         return params
@@ -814,23 +815,6 @@ class CreateViewshed(object):
             direction = "Input")
         #param4.value = r"D:\Workspace\Default.gdb"
 
-##        param5 = arcpy.Parameter(
-##            displayName = "Output folder for viewshed rasters",
-##            name = "outputFolder",
-##            datatype = "Folder",
-##            parameterType = "Required",
-##            direction = "Input"
-##        )
-##        param5.value = r"D:\temp\trash\ETVTests"
-
-##        param6 = arcpy.Parameter(
-##            displayName = "Viewed Landscape Feature Class",
-##            name = "viewedLandscapes",
-##            datatype = "GPFeatureLayer",
-##            parameterType = "Required",
-##            direction = "Input")
-##        param6.value = r"D:\Workspace\Default.gdb\ARD_VIEW_ViewedLandscapes_py"
-
         params = [param0, param1, param2, param3, param4]
         #params = [param0, param1, param2, param3, param4, param5, param6]
         return params
@@ -859,10 +843,6 @@ class CreateViewshed(object):
         parameter.  This method is called after internal validation."""
         return
 
-
-##    def addSIVFields(self, targetFC, fieldName, fieldType, fieldLength, messages):
-##        arcpy.AddField_management(targetFC, fieldName, fieldType, "", "", fieldLength, "", "NULLABLE"); messages.addGPMessages()
-
     def execute(self, parameters, messages):
         message = ""
         today=datetime.now()
@@ -886,25 +866,15 @@ class CreateViewshed(object):
         viewshedRootVisibleArea = "ARD_VIEW_" + parameters[2].valueAsText + "_VisibleArea"
         tempFeatureClass = os.path.join(parameters[4].valueAsText, "viewPoints")
         tempFeatureClassOutput = os.path.join(parameters[4].valueAsText, viewshedRoot + "_ObserverPoints_projected_pt")
-        #tempFeatureClassAlbers = os.path.join(parameters[4].valueAsText, viewshedRoot + "_ObserverPoints_albers_pt")
-        #tempPtClass = os.path.join(parameters[4].valueAsText, "ptAlbers0")
         tempPtClassOutput = os.path.join(parameters[4].valueAsText, "ptProj")
-        #tempPtClassAlbers = os.path.join(parameters[4].valueAsText, "ptAlbers")
         tempClipped = os.path.join(parameters[4].valueAsText,"tempClipped")
 
         outViewshed = ""
         compositeViewshed = "ARD_VIEW_" +parameters[2].valueAsText + "_VisibleAreas" # "_VisibleAreas"
         compositeViewshedPolys = "ARD_VIEW_" +parameters[2].valueAsText + "_VisibleAreas_py"
-        unionedVisibleAreas = "ARD_VIEW_" +parameters[2].valueAsText + "_UnionedVisibleAreas"
-        mergedSIV = "ARD_VIEW_" +parameters[2].valueAsText + "_CompositeVisibleAreas_py"
-        intersectedVisibleAreas = "ARD_VIEW_" +parameters[2].valueAsText + "_IntersectedVisibleAreas"
         outVisibility = "ARD_VIEW_" +parameters[2].valueAsText + "_Visibility_byObserver"
 
         joinFields = ["ViewpointID","ViewConeID","ViewID","UNIT_CODE","ViewedLandscapeNumber","ViewNumber", "Longitude","Latitude","LeftBearing", "RightBearing","ScenicQualityRating","ViewImportanceRating","ScenicInventoryValue"]
-
-        compositeSivMatrix = [['VH','VH','VH','H','M'],['VH','VH','H','M','L'],['H','H','M','L','L'],['H','M','L','VL','VL'],\
-             ['M','L','VL','VL','VL']]
-        sivFieldList = ["ScenicInventoryValue","ScenicInventoryRanking"]
 
         WGSSpatialRef = arcpy.SpatialReference(4326)
         AlbersSpatialRef = arcpy.SpatialReference(102039)
@@ -989,7 +959,7 @@ class CreateViewshed(object):
                     arcpy.Delete_management("in_memory"); messages.addGPMessages()
             #del cursor, row
 
-            # Create visible areas raster (i.e. composite viewshed) and combined polygons
+            # Create visible areas raster (i.e. composite viewshed) and visible areas feature class
             arcpy.env.workspace = parameters[4].valueAsText
             valueTable = arcpy.ValueTable()
             rasterSearchString = viewshedRootClippedTemp + "_*"
@@ -1012,24 +982,13 @@ class CreateViewshed(object):
                         cv = cv + Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
                     count = count + 1
                 cv.save(os.path.join(parameters[4].valueAsText, compositeViewshed))
-                #for ras in rasters:
-                 #   arcpy.Delete_management(ras)
-
-                visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
-                arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
-                for visArea in visAreas:
-                    valueTable.addRow(visArea); messages.addGPMessages()
-                #arcpy.AddMessage("Rows in ValueTable: " + str(valueTable.rowCount))
             else: # Only one viewpoint (like SCBL)
                 arcpy.CopyRaster_management(clippedViewshed, os.path.join(parameters[4].valueAsText, compositeViewshed)); messages.addGPMessages()
-                visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
-                arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
 
             for ras in rasters:
                 arcpy.Delete_management(ras)
-            for visArea in visAreas:
-                valueTable.addRow(visArea); messages.addGPMessages()
 
+            # Create visible areas feature class from composite viewshed
             tempViz = ExtractByAttributes(compositeViewshed, "Value > 0"); messages.addGPMessages()
             tempViz.save(os.path.join(parameters[4].valueAsText, "tempViz"))
             arcpy.RasterToPolygon_conversion(os.path.join(parameters[4].valueAsText, "tempViz"), os.path.join(parameters[4].valueAsText, "tempVizPolys"), "NO_SIMPLIFY", "Value"); messages.addGPMessages()
@@ -1038,119 +997,6 @@ class CreateViewshed(object):
             arcpy.AlterField_management(os.path.join(parameters[4].valueAsText, compositeViewshedPolys), "gridcode", "VisiblePointCount", "VisiblePointCount"); messages.addGPMessages()
             arcpy.RepairGeometry_management(os.path.join(parameters[4].valueAsText, compositeViewshedPolys)); messages.addGPMessages()
 
-            # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
-            if arcpy.Exists(unionedVisibleAreas):
-                arcpy.Delete_management(unionedVisibleAreas); messages.addGPMessages()
-            arcpy.Union_analysis(valueTable, unionedVisibleAreas); messages.addGPMessages()
-            arcpy.RepairGeometry_management(unionedVisibleAreas); messages.addGPMessages()
-
-            # Use unioned polys and use lookup matrix to populate SIV (as individual visible areas feature class)
-            # Add fields and populate
-            allFields = arcpy.ListFields(unionedVisibleAreas)
-            fieldCount = int(len(allFields))
-            arcpy.AddField_management(unionedVisibleAreas, "cSQ", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
-            arcpy.AddField_management(unionedVisibleAreas, "cVI", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
-            arcpy.AddField_management(unionedVisibleAreas, "CompositeSIV", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
-            arcpy.AddField_management(unionedVisibleAreas, "ViewCount", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
-
-            arcpy.AddMessage("\n Calculating temporary SIV fields")
-            sqAttList = arcpy.ListFields(unionedVisibleAreas, 'ScenicQuality*')
-            viAttList = arcpy.ListFields(unionedVisibleAreas, 'ViewImportance*')
-            cursorComp = arcpy.UpdateCursor(unionedVisibleAreas)
-            for rowComp in cursorComp:
-                newSQ = ''
-                for sqAtt in sqAttList:
-                    sqValue = rowComp.getValue(sqAtt.name)
-                    #check for nulls coming from ETV database
-                    if sqValue != '' and len(sqValue) > 0:
-                        sqValue = rowComp.getValue(sqAtt.name)
-                        if sqValue == ' ' or len(sqValue) == 0:
-                            break
-                        elif sqValue == 'A':
-                            newSQ = 'A'
-                        elif sqValue == 'B' and not newSQ == 'A':
-                            newSQ = 'B'
-                        elif sqValue == 'C' and not newSQ in('A','B'):
-                            newSQ = 'C'
-                        elif sqValue == 'D' and not newSQ in('A','B','C'):
-                            newSQ = 'D'
-                        elif sqValue == 'E' and not newSQ in('A','B','C','D'):
-                            newSQ = 'E'
-                rowComp.setValue("cSQ", newSQ)
-                arcpy.AddMessage("\n New cSQ == " + newSQ)
-                #rowComp['cSQ'] = newSQ
-                #rowComp[fieldCount+1] = newSQ
-
-                newVI = 10
-                for viAtt in viAttList:
-                    viValue0 = rowComp.getValue(viAtt.name)
-                    #check for nulls coming from ETV database
-                    if viValue0 != None and viValue0 != '' and len(viValue0) > 0:
-                        #viValue = int(rowComp.getValue(viAtt.name))
-                        viValue = int(viValue0)
-                        for i in range(1,6):
-                            if viValue == i and viValue <= newVI:
-                                newVI = i
-                if newVI <> 10:
-                    rowComp.setValue("cVI", newVI)
-                arcpy.AddMessage("\n New cVI == " + str(newVI))
-                cursorComp.updateRow(rowComp)
-
-            #del rowComp, cursorComp
-
-            arcpy.AddMessage("\n Calculating SIV fields")
-            newCompSQ = 4
-            cursorSIV = arcpy.UpdateCursor(unionedVisibleAreas)
-            for rowSIV in cursorSIV:
-                compSQ = rowSIV.getValue('cSQ')
-                if compSQ == 'A':
-                    newCompSQ = 0
-                elif compSQ == 'B':
-                    newCompSQ = 1
-                elif compSQ == 'C':
-                    newCompSQ = 2
-                elif compSQ == 'D':
-                    newCompSQ = 3
-                elif compSQ == 'E':
-                    newCompSQ = 4
-                compSQ = newCompSQ
-                if rowSIV.getValue("cVI") != None:
-                    compVI = int(rowSIV.getValue("cVI")) - 1
-                    compSIV = compositeSivMatrix[compSQ][compVI]
-                    rowSIV.setValue("CompositeSIV", compSIV)
-                    cursorSIV.updateRow(rowSIV)
-
-            attList = arcpy.ListFields(unionedVisibleAreas, 'FID*_View*_py')
-            lyrCount = 0
-            cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
-            for rowCount in cursorCount:
-                for att in attList:
-                    if int(rowCount.getValue(att.name)) >= int(1):
-                        lyrCount += 1
-                rowCount.setValue("ViewCount", lyrCount)
-                cursorCount.updateRow(rowCount)
-                lyrCount = 0
-
-            arcpy.AddMessage("\n Creating SIV polygons")
-            sivTable = arcpy.ValueTable()
-            for att in attList:
-                sivFc = att.name[4:-3] + '_CompositeSIV_py'
-                #sivFc = att.name[4:-13] + '_CompositeSIV'
-                #sivFc = att.name[4:-5] + '_SIV'
-                where_clause = '"' + att.name + '" >= 1'
-                arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
-                arcpy.RepairGeometry_management(sivFc); messages.addGPMessages()
-                sivTable.addRow(sivFc); messages.addGPMessages()
-                for item in ["FID_*", "ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]:
-                    delList = arcpy.ListFields(sivFc, item)
-                    for f in delList:
-                        arcpy.DeleteField_management(sivFc, f.name); messages.addGPMessages()
-
-            if arcpy.Exists(mergedSIV):
-                arcpy.Delete_management(mergedSIV); messages.addGPMessages()
-            arcpy.Merge_management(sivTable, mergedSIV); messages.addGPMessages()
-            arcpy.RepairGeometry_management(mergedSIV); messages.addGPMessages()
-
             # Compute visibility by observer
             if int(pointCount.getOutput(0)) < 17:
                 tempRaster = os.path.join(parameters[4].valueAsText, "tempRaster")
@@ -1158,13 +1004,214 @@ class CreateViewshed(object):
 
             # Clean up
             itemsToDelete = [tempFeatureClass, os.path.join(parameters[4].valueAsText, tempTable), os.path.join(parameters[4].valueAsText, sourceView), os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, "tempViz"),os.path.join(parameters[4].valueAsText,"tempClipped")] #tempLayer, tempFeature
-            #itemsToDelete = [tempFeatureClass, os.path.join(parameters[4].valueAsText, "tempRaster"), os.path.join(parameters[4].valueAsText, tempTable), os.path.join(parameters[4].valueAsText, sourceView), os.path.join(parameters[4].valueAsText, "tempVizPolys"), os.path.join(parameters[4].valueAsText, "tempViz")] #tempLayer, tempFeature
-            #itemsToDelete = [tempFeatureClass] #tempLayer, tempFeature
             for item in itemsToDelete:
                 if arcpy.Exists(item):
                     arcpy.Delete_management(item); messages.addGPMessages()
         else:
             arcpy.AddMessage("\n\n **** ERROR ****\n\n\t DEM spatial reference does not match projected viewed landscape polygon feature class. \n\n\tPlease re-project the feature class by re-running the Create Viewed Landscape Polygons tool with a spatial reference that matches the DEM.")
+
+
+class CalculateCompositeScenicInventoryRanking(object):
+    def __init__(self):
+        """Define the tool (tool name is the name of the class)."""
+        self.label = "5 Calculate Composite Scenic Inventory Ranking"
+        self.description = "Given visible area polygons (produced by the Create Viewsheds and Visible Areas tool), create visible area feature classes with composite scenic inventory values and rankings."
+        self.canRunInBackground = False
+
+    def getParameterInfo(self):
+        """Define parameter definitions"""
+
+        param0 = arcpy.Parameter(
+            displayName = "Source Viewpoint Table",  # Needs to be the ViewBearings view
+            name = "viewpointSource",
+            datatype = "DETable",
+            parameterType = "Required",
+            direction = "Input")
+        #param1.value = r"Database Connections\ETV_INP2300VIRMASQL_IRMA_Report_Data_Reader.sde\ETV.web.ViewBearings"
+
+        param1 = arcpy.Parameter(
+            displayName = "Choose a park to extract",
+            name = "parkToExtract",
+            datatype = "String",
+            parameterType  = "Required",
+            direction = "Input")
+
+        param2 = arcpy.Parameter(
+            displayName = "Output GeoDatabase",
+            name = "outDB",
+            datatype = "DEWorkspace",
+            parameterType = "Required",
+            direction = "Input")
+        #param3.value = r"D:\Workspace\Default.gdb"
+
+        params = [param0, param1, param2]
+        return params
+
+    def isLicensed(self):
+        """Set whether tool is licensed to execute."""
+        return True
+
+    def updateParameters(self, parameters):
+        """Modify the values and properties of parameters before internal
+        validation is performed.  This method is called whenever a parameter
+        has been changed."""
+        # Modified from the example shown here: http://blogs.esri.com/esri/arcgis/2011/08/25/generating-a-choice-list-from-a-field/
+        if parameters[0].value:
+            parameters[1].filter.list = [str(val) for val in
+                                            sorted(
+                                              set(
+                                                row.getValue(ddDisplayField)
+                                                for row in arcpy.SearchCursor(parameters[0].value)
+                                                  )
+                                               )
+                                          ]
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool
+        parameter.  This method is called after internal validation."""
+        return
+
+    def execute(self, parameters, messages):
+        message = ""
+        today=datetime.now()
+        datestamp = str(today.isoformat()).replace('-','')[0:8]
+
+        arcpy.env.overwriteOutput = 1
+        arcpy.CheckOutExtension("3D")
+        arcpy.CheckOutExtension("Spatial")
+
+        # Variables specific to park and visible areas
+        whereClause = "UNIT_CODE = '" + parameters[1].valueAsText + "'"
+        unionedVisibleAreas = "ARD_VIEW_" +parameters[1].valueAsText + "_UnionedVisibleAreas"
+        mergedSIV = "ARD_VIEW_" +parameters[1].valueAsText + "_CompositeVisibleAreas_py"
+
+        compositeSivMatrix = [['VH','VH','VH','H','M'],['VH','VH','H','M','L'],['H','H','M','L','L'],['H','M','L','VL','VL'],\
+             ['M','L','VL','VL','VL']]
+        sivFieldList = ["ScenicInventoryValue","ScenicInventoryRanking"]
+
+        arcpy.env.workspace = parameters[2].valueAsText
+        valueTable = arcpy.ValueTable()
+        sivTable = arcpy.ValueTable()
+
+        # Iterate visible areas feature classes, calculating composite SIV and ranking
+        visibleAreasSearchString = "ARD_VIEW_" + parameters[1].valueAsText + "_VisibleArea_*_py"
+
+        visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
+        arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
+        for visArea in visAreas:
+            valueTable.addRow(visArea); messages.addGPMessages()
+
+        # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
+        if arcpy.Exists(unionedVisibleAreas):
+            arcpy.Delete_management(unionedVisibleAreas); messages.addGPMessages()
+        arcpy.Union_analysis(valueTable, unionedVisibleAreas); messages.addGPMessages()
+        arcpy.RepairGeometry_management(unionedVisibleAreas); messages.addGPMessages()
+
+        # Use unioned polys and use lookup matrix to populate SIV (as individual visible areas feature class)
+        # Add fields and populate
+        arcpy.AddField_management(unionedVisibleAreas, "cSQ", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "cVI", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "CompositeSIV", "TEXT", "", "", 2, "", "NULLABLE"); messages.addGPMessages()
+        arcpy.AddField_management(unionedVisibleAreas, "ViewCount", "SHORT", "", "", "", "", "NULLABLE"); messages.addGPMessages()
+
+        arcpy.AddMessage("\n Calculating temporary SIV fields")
+        sqAttList = arcpy.ListFields(unionedVisibleAreas, 'ScenicQuality*')
+        viAttList = arcpy.ListFields(unionedVisibleAreas, 'ViewImportance*')
+        cursorComp = arcpy.UpdateCursor(unionedVisibleAreas)
+        for rowComp in cursorComp:
+            newSQ = ''
+            for sqAtt in sqAttList:
+                sqValue = rowComp.getValue(sqAtt.name)
+                #check for nulls coming from ETV database
+                if sqValue != '' and len(sqValue) > 0:
+                    sqValue = rowComp.getValue(sqAtt.name)
+                    if sqValue == ' ' or len(sqValue) == 0:
+                        break
+                    elif sqValue == 'A':
+                        newSQ = 'A'
+                    elif sqValue == 'B' and not newSQ == 'A':
+                        newSQ = 'B'
+                    elif sqValue == 'C' and not newSQ in('A','B'):
+                        newSQ = 'C'
+                    elif sqValue == 'D' and not newSQ in('A','B','C'):
+                        newSQ = 'D'
+                    elif sqValue == 'E' and not newSQ in('A','B','C','D'):
+                        newSQ = 'E'
+            rowComp.setValue("cSQ", newSQ)
+            arcpy.AddMessage("\n New cSQ == " + newSQ)
+
+            newVI = 10
+            for viAtt in viAttList:
+                viValue0 = rowComp.getValue(viAtt.name)
+                #check for nulls coming from ETV database
+                if viValue0 != None and viValue0 != '' and len(viValue0) > 0:
+                    viValue = int(viValue0)
+                    for i in range(1,6):
+                        if viValue == i and viValue <= newVI:
+                            newVI = i
+            if newVI <> 10:
+                rowComp.setValue("cVI", newVI)
+            arcpy.AddMessage("\n New cVI == " + str(newVI))
+            cursorComp.updateRow(rowComp)
+
+        arcpy.AddMessage("\n Calculating SIV fields")
+        newCompSQ = 4
+        cursorSIV = arcpy.UpdateCursor(unionedVisibleAreas)
+        for rowSIV in cursorSIV:
+            compSQ = rowSIV.getValue('cSQ')
+            if compSQ == 'A':
+                newCompSQ = 0
+            elif compSQ == 'B':
+                newCompSQ = 1
+            elif compSQ == 'C':
+                newCompSQ = 2
+            elif compSQ == 'D':
+                newCompSQ = 3
+            elif compSQ == 'E':
+                newCompSQ = 4
+            compSQ = newCompSQ
+            if rowSIV.getValue("cVI") != None:
+                compVI = int(rowSIV.getValue("cVI")) - 1
+                compSIV = compositeSivMatrix[compSQ][compVI]
+                rowSIV.setValue("CompositeSIV", compSIV)
+                cursorSIV.updateRow(rowSIV)
+
+        attList = arcpy.ListFields(unionedVisibleAreas, 'FID*_View*_py')
+        lyrCount = 0
+        cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
+        for rowCount in cursorCount:
+            for att in attList:
+                if int(rowCount.getValue(att.name)) >= int(1):
+                    lyrCount += 1
+            rowCount.setValue("ViewCount", lyrCount)
+            cursorCount.updateRow(rowCount)
+            lyrCount = 0
+
+        arcpy.AddMessage("\n Creating SIV polygons")
+        fcCheck = '*_CompositeSIV_py'
+        checkFCs = arcpy.ListFeatureClasses(fcCheck); messages.addGPMessages()
+        for checkFC in checkFCs:
+            if arcpy.Exists(checkFC):
+                arcpy.Delete_management(checkFC); messages.addGPMessages()
+
+        for att in attList:
+            sivFc = att.name[4:-3] + '_CompositeSIV_py'
+            if arcpy.Exists(sivFc):
+                arcpy.Delete_management(sivFc); messages.addGPMessages()
+            where_clause = '"' + att.name + '" >= 1'
+            arcpy.Select_analysis(unionedVisibleAreas, sivFc, where_clause); messages.addGPMessages()
+            arcpy.RepairGeometry_management(sivFc); messages.addGPMessages()
+            sivTable.addRow(sivFc); messages.addGPMessages()
+            for item in ["FID_*", "ViewConeID_*","ViewpointID_*","ViewID_*","UNIT_CODE_*","ViewedLandscapeNumber_*","ViewNumber_*","Longitude_*","Latitude_*","LeftBearing_*","RightBearing_*","ScenicQualityRating_*","ViewImportanceRating_*","ScenicInventoryValue_*"]:
+                delList = arcpy.ListFields(sivFc, item)
+                for f in delList:
+                    arcpy.DeleteField_management(sivFc, f.name); messages.addGPMessages()
+
+        if arcpy.Exists(mergedSIV):
+            arcpy.Delete_management(mergedSIV); messages.addGPMessages()
+        arcpy.Merge_management(sivTable, mergedSIV); messages.addGPMessages()
+        arcpy.RepairGeometry_management(mergedSIV); messages.addGPMessages()
+
 
 ##def main():
 ##
