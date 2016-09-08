@@ -1120,7 +1120,7 @@ class CreateViewshed(object):
                     rowSIV.setValue("CompositeSIV", compSIV)
                     cursorSIV.updateRow(rowSIV)
 
-            attList = arcpy.ListFields(unionedVisibleAreas, 'FID*')
+            attList = arcpy.ListFields(unionedVisibleAreas, 'FID*_View*_py')
             lyrCount = 0
             cursorCount = arcpy.UpdateCursor(unionedVisibleAreas)
             for rowCount in cursorCount:
