@@ -982,11 +982,10 @@ class CreateViewshed(object):
                         cv = cv + Con(IsNull(arcpy.Raster(ras)), 0, arcpy.Raster(ras)); arcpy.AddMessage("\nAdded " + ras + " to visible areas raster with count: " + str(count))
                     count = count + 1
                 cv.save(os.path.join(parameters[4].valueAsText, compositeViewshed))
+                for ras in rasters:
+                    arcpy.Delete_management(ras)
             else: # Only one viewpoint (like SCBL)
                 arcpy.CopyRaster_management(clippedViewshed, os.path.join(parameters[4].valueAsText, compositeViewshed)); messages.addGPMessages()
-
-            for ras in rasters:
-                arcpy.Delete_management(ras)
 
             # Create visible areas feature class from composite viewshed
             tempViz = ExtractByAttributes(compositeViewshed, "Value > 0"); messages.addGPMessages()
