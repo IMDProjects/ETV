@@ -1098,7 +1098,9 @@ class CalculateCompositeScenicInventoryRanking(object):
         visAreas = arcpy.ListFeatureClasses(visibleAreasSearchString)
         arcpy.AddMessage("\nSearched for " + visibleAreasSearchString + " and processing " + str(len(visAreas))+ " to create unioned visible areas")
         for visArea in visAreas:
-            valueTable.addRow(visArea); messages.addGPMessages()
+            #arcpy.AddMessage("\nvisArea == " + visArea)
+            valueTable.addRow(visArea)#; messages.addGPMessages()
+            arcpy.AddMessage("\nAdded visArea to valueTable: " + str(valueTable))
 
         # Compute composite Scenic Inventory Values (cSIV) by unioning viewshed polygons and populating value based on unioned scenic inventory value
         if arcpy.Exists(unionedVisibleAreas):
@@ -1122,20 +1124,23 @@ class CalculateCompositeScenicInventoryRanking(object):
             for sqAtt in sqAttList:
                 sqValue = rowComp.getValue(sqAtt.name)
                 #check for nulls coming from ETV database
-                if sqValue != '' and len(sqValue) > 0:
-                    sqValue = rowComp.getValue(sqAtt.name)
-                    if sqValue == ' ' or len(sqValue) == 0:
-                        break
-                    elif sqValue == 'A':
-                        newSQ = 'A'
-                    elif sqValue == 'B' and not newSQ == 'A':
-                        newSQ = 'B'
-                    elif sqValue == 'C' and not newSQ in('A','B'):
-                        newSQ = 'C'
-                    elif sqValue == 'D' and not newSQ in('A','B','C'):
-                        newSQ = 'D'
-                    elif sqValue == 'E' and not newSQ in('A','B','C','D'):
-                        newSQ = 'E'
+                if sqValue == None:
+                    break
+                else:
+                    if sqValue != '' and len(sqValue) > 0:
+                        sqValue = rowComp.getValue(sqAtt.name)
+                        if sqValue == ' ' or len(sqValue) == 0:
+                            break
+                        elif sqValue == 'A':
+                            newSQ = 'A'
+                        elif sqValue == 'B' and not newSQ == 'A':
+                            newSQ = 'B'
+                        elif sqValue == 'C' and not newSQ in('A','B'):
+                            newSQ = 'C'
+                        elif sqValue == 'D' and not newSQ in('A','B','C'):
+                            newSQ = 'D'
+                        elif sqValue == 'E' and not newSQ in('A','B','C','D'):
+                            newSQ = 'E'
             rowComp.setValue("cSQ", newSQ)
             arcpy.AddMessage("\n New cSQ == " + newSQ)
 
