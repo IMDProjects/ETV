@@ -725,7 +725,8 @@ class CalculateScenicInventoryValues(object):
         viewedLandscapeFC = parameters[0].valueAsText
         idField = "ViewID"
         fieldList = ["ScenicQualityRating","ViewImportanceRating","ScenicInventoryValue","ScenicInventoryRanking"]
-        sql = r'select ViewID, SSRS.View_SQRating(ViewID) ScenicQualityRating, SSRS.View_ImportanceRating(ViewConeID) ViewImportanceRating, SSRS.View_SQRating(ViewID) + SSRS.View_ImportanceRating(ViewConeID) ScenicInventoryValue from web.ViewBearings'
+        sql = r'select ViewID, SSRS.View_SQRating(ViewID) ScenicQualityRating, SSRS.View_ImportanceRating(ViewImportanceId) ViewImportanceRating, SSRS.View_SQRating(ViewID) + SSRS.View_ImportanceRating(ViewImportanceId) ScenicInventoryValue from web.ViewBearings;'
+        #sql = r'select ViewID, SSRS.View_SQRating(ViewID) ScenicQualityRating, SSRS.View_ImportanceRating(ViewConeID) ViewImportanceRating, SSRS.View_SQRating(ViewID) + SSRS.View_ImportanceRating(ViewConeID) ScenicInventoryValue from web.ViewBearings'
         ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'VH','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'H','C2': 'H','C3': 'M','C4': 'L','C5': 'L','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'VL','E4': 'VL','E5': 'VL'}
         #ScenicInventoryRankings = {'A1': 'VH','A2': 'VH','A3': 'H','A4': 'H','A5': 'M','B1': 'VH','B2': 'VH','B3': 'H','B4': 'M','B5': 'L','C1': 'VH','C2': 'H','C3': 'M','C4': 'L','C5': 'VL','D1': 'H','D2': 'M','D3': 'L','D4': 'VL','D5': 'VL','E1': 'M','E2': 'L','E3': 'L','E4': 'VL','E5': 'VL'}
 
