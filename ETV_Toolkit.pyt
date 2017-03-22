@@ -719,8 +719,8 @@ class CalculateScenicInventoryValues(object):
 
         arcpy.env.overwriteOutput = 1
 
-        viewedLandscapeFCName = "ARD_VIEW_ViewedLandscapes_py" # Park-specific "ARD_<UNIT_CODE>_VIEW_ViewedLandscapes_py"
-        viewedLandscapeFCNameWebMerc = "ARD_VIEW_ViewedLandscapes_webmerc_py"
+        #viewedLandscapeFCName = "ARD_VIEW_ViewedLandscapes_py" # Park-specific "ARD_<UNIT_CODE>_VIEW_ViewedLandscapes_py"
+        #viewedLandscapeFCNameWebMerc = "ARD_VIEW_ViewedLandscapes_webmerc_py"
 
         viewedLandscapeFC = parameters[0].valueAsText
         idField = "ViewID"
@@ -740,8 +740,10 @@ class CalculateScenicInventoryValues(object):
 
         # Get SQ, VI, and SIV from database
         sdeConn = arcpy.ArcSDESQLExecute(parameters[1].valueAsText)
+        #arcpy.AddMessage(sdeConn)
         #arcpy.AddMessage('\n\t'+ sql)
         sdeReturn = sdeConn.execute(sql)
+        #arcpy.AddMessage(sdeReturn)
 
         # Cursor through rows, updating attributes
         if isinstance(sdeReturn, list):
@@ -916,8 +918,8 @@ class CreateViewshed(object):
             with arcpy.da.SearchCursor(parameters[1].valueAsText, "*", whereClause) as cursor:
                 for row in cursor:
                     ptFeature = []
-                    arcpy.AddMessage("\n\nPoint for viewshed: " + str(row[7]) + ", "  + str(row[8]))
-                    newPt = arcpy.PointGeometry(arcpy.Point(row[7], row[8]), WGSSpatialRef) # setting explicit variable required
+                    arcpy.AddMessage("\n\nPoint for viewshed: " + str(row[9]) + ", "  + str(row[10]))
+                    newPt = arcpy.PointGeometry(arcpy.Point(row[9], row[10]), WGSSpatialRef) # setting explicit variable required
                     ptFeature.append(newPt)
                     #arcpy.AddMessage("\n\nPoints in ptFeature: " + ptFeature[0].WKT)
 
@@ -927,13 +929,13 @@ class CreateViewshed(object):
                     arcpy.CopyFeatures_management(newPtOutput, tempPtClassOutput); messages.addGPMessages()
                     arcpy.RepairGeometry_management(tempPtClassOutput); messages.addGPMessages()
 
-                    outViewshed = os.path.join(parameters[4].valueAsText, viewshedRoot + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
+                    outViewshed = os.path.join(parameters[4].valueAsText, viewshedRoot + "_" + (row[3].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[7]))
                     arcpy.Viewshed_3d(os.path.join(parameters[4].valueAsText, "tempRaster"), tempPtClassOutput, outViewshed, "1", "CURVED_EARTH"); messages.addGPMessages()
 
                     # Clip viewshed to view
-                    clippedViewshed = os.path.join(parameters[4].valueAsText, viewshedRootClipped + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
-                    clippedViewshedTemp = os.path.join(parameters[4].valueAsText, viewshedRootClippedTemp + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6]))
-                    arcpy.SelectLayerByAttribute_management(viewPolygons, "NEW_SELECTION", "ViewpointName = '" + row[4].replace("'", "''") + "'"); messages.addGPMessages()
+                    clippedViewshed = os.path.join(parameters[4].valueAsText, viewshedRootClipped + "_" + (row[3].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[7]))
+                    clippedViewshedTemp = os.path.join(parameters[4].valueAsText, viewshedRootClippedTemp + "_" + (row[3].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[7]))
+                    arcpy.SelectLayerByAttribute_management(viewPolygons, "NEW_SELECTION", "ViewpointName = '" + row[3].replace("'", "''") + "'"); messages.addGPMessages()
                     #arcpy.Clip_management(outViewshed, viewPolygons, clippedViewshed, )
                     clippedOutput = ExtractByMask(outViewshed, viewPolygons); messages.addGPMessages()
                     clippedOutput.save(clippedViewshedTemp)
@@ -943,14 +945,14 @@ class CreateViewshed(object):
                     #arcpy.Copy_management(clippedViewshedTemp, clippedViewshed); messages.addGPMessages()
 
                     # Create visible area polygons and attribute them
-                    viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[4].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[6])) + "_py"
+                    viewPoly = os.path.join(parameters[4].valueAsText, viewshedRootVisibleArea + "_" + (row[3].replace(' ','_')).replace("'", '').replace(".","").replace("-","").replace("/","_").replace("(","").replace(")","") + "_View" + str(row[7])) + "_py"
                     #arcpy.RasterToPolygon_conversion(clippedViewshedTemp, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
                     arcpy.RasterToPolygon_conversion(clippedViewshed, tempClipped, "NO_SIMPLIFY", "Value"); messages.addGPMessages()
                     arcpy.RepairGeometry_management(tempClipped); messages.addGPMessages()
                     arcpy.Dissolve_management(tempClipped, viewPoly, "gridcode"); messages.addGPMessages()
                     arcpy.RepairGeometry_management(viewPoly); messages.addGPMessages()
                     arcpy.AddField_management(viewPoly,"ViewpointName","TEXT", "", "", 255, "ViewpointName", "NULLABLE"); messages.addGPMessages()
-                    arcpy.CalculateField_management(viewPoly, "ViewpointName", "'" + row[4].replace("'", "''") + "'", "PYTHON_9.3"); messages.addGPMessages()
+                    arcpy.CalculateField_management(viewPoly, "ViewpointName", "'" + row[3].replace("'", "''") + "'", "PYTHON_9.3"); messages.addGPMessages()
                     arcpy.JoinField_management(viewPoly,"ViewpointName",viewPolygons,"ViewpointName", joinFields); messages.addGPMessages()
                     arcpy.DeleteField_management(viewPoly,["Id","gridcode"]); messages.addGPMessages()
 
@@ -1272,6 +1274,27 @@ class CalculateCompositeScenicInventoryRanking(object):
 ##    params = [param0, param1, param2, param3, param4, param5]
 ##    vs = CreateViewshed()
 ##    CreateViewshed.execute(vs, params, "")
+
+
+##    param0 = arcpy.Parameter(
+##        displayName = "Viewed Landscape Feature Class",
+##        name = "viewedLandscapes",
+##        datatype = "GPFeatureLayer",
+##        parameterType = "Required",
+##        direction = "Input")
+##    param0.value = r"D:\Workspace\Default.gdb\ARD_VIEW_CATO_ViewedLandscapes_projected_py"
+##
+##    param1 = arcpy.Parameter(
+##        displayName = "Source Enjoy the View Database",
+##        name = "sivSource",
+##        datatype = "DEWorkspace",
+##        parameterType = "Required",
+##        direction = "Input")
+##    param1.value = r"Database Connections\ETV_on_INP2300VIRMASQL_ETV_Reader.sde"
+##
+##    params = [param0, param1]
+##    cv = CalculateScenicInventoryValues()
+##    CalculateScenicInventoryValues.execute(cv, params, "")
 ##
 ##if __name__ == '__main__':
 ##    main()
